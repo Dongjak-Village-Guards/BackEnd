@@ -174,3 +174,5 @@ cython_debug/
 # End of https://www.toptal.com/developers/gitignore/api/django
 
 secrets.json
+# Firebase 서비스 계정 키 파일
+dongjak-village-guards-3cc0caa945e7.json

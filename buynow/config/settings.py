@@ -66,6 +66,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     'storages', #S3
     'drf_yasg',  # Swagger
+    'rest_framework', # DRF 관련 django rest framework
 ]
 
 
@@ -104,12 +105,16 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-ENVIRONMENT = os.getenv('DJANGO_ENV', 'development')  # 기본값은 development
+ENVIRONMENT = os.getenv('DJANGO_ENV', 'local')  # 기본값은 development
 
 DB_DEV_PW = get_secret("DB_DEV_PW") #개발용 DB 비밀번호
 DB_DEP_PW = get_secret("DB_DEP_PW") #배포용 DB 비밀번호
 
 DATABASES = {
+    'local': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    },
     'development': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': "buynow_dev",  # 개발용 DB 이름
@@ -189,4 +194,15 @@ AWS_STORAGE_BUCKET_NAME = 'likelion13thbucket'
 AWS_S3_CUSTOM_DOMAIN = '%s.s3.%s.amazonaws.com' % (AWS_STORAGE_BUCKET_NAME,AWS_REGION)
 AWS_S3_OBJECT_PARAMETERS = {
     'CacheControl': 'max-age=86400',
+}
+
+###REST_FRAMEWORK###
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'config.authentication.FirebaseIDTokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',  # 필요시
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }
