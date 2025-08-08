@@ -14,6 +14,8 @@ from pathlib import Path
 import os, json
 from django.core.exceptions import ImproperlyConfigured
 
+import pymysql
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -62,6 +64,8 @@ PROJECT_APPS = [
 
 THIRD_PARTY_APPS = [
     "corsheaders",
+    'storages', #S3
+    'drf_yasg',  # Swagger
 ]
 
 
@@ -100,14 +104,31 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+ENVIRONMENT = os.getenv('DJANGO_ENV', 'development')  # 기본값은 development
+
+DB_DEV_PW = get_secret("DB_DEV_PW") #개발용 DB 비밀번호
+DB_DEP_PW = get_secret("DB_DEP_PW") #배포용 DB 비밀번호
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'development': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': "buynow_dev",  # 개발용 DB 이름
+        'USER': "likelion13th",
+        'PASSWORD': DB_DEV_PW,
+        'HOST': "127.0.0.1",
+        'PORT': '3307',
+    },
+    'deployment': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'buynow_dep',  # 배포용 DB 이름
+        'USER': 'likelion13th',
+        'PASSWORD': DB_DEP_PW,
+        'HOST': "127.0.0.1",
+        'PORT': '3307',
+    },
 }
-
+# 환경에 맞는 DB 설정을 'default'로 지정
+DATABASES['default'] = DATABASES.get(ENVIRONMENT)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -155,4 +176,17 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWEDORIGINS = {
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+}
+pymysql.install_as_MySQLdb()
+
+###AWS###
+AWS_ACCESS_KEY_ID = get_secret("AWS_ACCESS_KEY_ID") # .csv 파일에 있는 내용을 입력 Access key ID. IAM 계정 관련
+AWS_SECRET_ACCESS_KEY = get_secret("AWS_SECRET_ACCESS_KEY") # .csv 파일에 있는 내용을 입력 Secret access key. IAM 계정 관련
+AWS_REGION = 'ap-northeast-2'
+
+###S3###
+AWS_STORAGE_BUCKET_NAME = 'likelion13thbucket'
+AWS_S3_CUSTOM_DOMAIN = '%s.s3.%s.amazonaws.com' % (AWS_STORAGE_BUCKET_NAME,AWS_REGION)
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',
 }
