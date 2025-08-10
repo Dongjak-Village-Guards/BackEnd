@@ -14,7 +14,7 @@ class BaseModel(models.Model): # models.Model을 상속받음
 class User(BaseModel):
     ROLE_CHOICES = (
         ('admin', 'Admin'),
-        ('customer', 'Curtomer'),
+        ('customer', 'Customer'),
         ('owner', 'Owner'),
     )
 
