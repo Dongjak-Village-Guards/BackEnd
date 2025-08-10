@@ -19,10 +19,13 @@ def google_login(request):
     id_token = request.data.get('id_token')
     if not id_token:
         return Response({"error" : "ID token is required"}, status = 400)
-    
+    role = request.data.get('user_role')
+    if not role:
+        return Response({"error" : "user role is required"}, status = 400)
+
     try:
         email = verify_firebase_id_token(id_token) # config/authentication.py 에서의 함수 사용해 토큰에서 email 추출
-        user, created = User.objects.get_or_create(user_email = email)
+        user, created = User.objects.get_or_create(user_email = email, defaults= {'user_role' : role})
 
         return Response({
             'message' : 'Login successful',

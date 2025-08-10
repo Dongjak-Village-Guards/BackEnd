@@ -12,9 +12,16 @@ class BaseModel(models.Model): # models.Model을 상속받음
 
 # User 모델 정의
 class User(BaseModel):
+    ROLE_CHOICES = (
+        ('admin', 'Admin'),
+        ('customer', 'Curtomer'),
+        ('owner', 'Owner'),
+    )
+
     user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_email = models.EmailField(unique = True) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
     user_address = models.CharField(blank = True, max_length = 100) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
+    user_role = models.CharField(max_length = 20, choices = ROLE_CHOICES, default = 'customer')
 
     def __str__(self):
-        return self.user_email
+        return f"{self.email} ({self.role})"
