@@ -22,6 +22,7 @@ class User(BaseModel):
     user_email = models.EmailField(unique = True) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
     user_address = models.CharField(blank = True, max_length = 100) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
     user_role = models.CharField(max_length = 20, choices = ROLE_CHOICES, default = 'customer')
+    user_discounted_cost_sum = models.IntegerField(default = 0)
 
     def __str__(self):
         return f"{self.email} ({self.role})"
