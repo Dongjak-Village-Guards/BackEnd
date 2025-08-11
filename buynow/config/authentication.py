@@ -22,8 +22,12 @@ def verify_firebase_id_token(id_token):
     email = decoded_token.get('email')
     if not email:
         raise AuthenticationFailed('Email not found in token')
+    
+    image_url = decoded_token.get('picture')
+    if not image_url:
+        raise AuthenticationFailed('Image Url not found in token')
 
-    return email
+    return email, image_url
 
 # 프론트에서 전달된 Firebase id_token을 검증하고 user 객체를 반환하는 인증 클래스
 class FirebaseIDTokenAuthentication(BaseAuthentication):
@@ -36,9 +40,9 @@ class FirebaseIDTokenAuthentication(BaseAuthentication):
         id_token = auth_header.split(' ')[1]
 
         try:
-            email = verify_firebase_id_token(id_token)
+            email, image_url = verify_firebase_id_token(id_token)
         except AuthenticationFailed as e:
             raise AuthenticationFailed(f"Invalid Firebase ID token: {str(e)}")
         
-        user, _ = User.objects.get_or_create(user_email=email) # User 테이블에서 email 조건에 맞는 레코드를 가져옴 -> 없으면 새로 생성&저장
+        user, _ = User.objects.get_or_create(user_email=email, defaults={'user_image_url' : image_url}) # User 테이블에서 email 조건에 맞는 레코드를 가져옴 -> 없으면 새로 생성&저장
         return (user, None)  # authenticate 함수는 (user, auth) 튜플 반환해야 함
