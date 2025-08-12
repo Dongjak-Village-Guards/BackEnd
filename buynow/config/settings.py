@@ -60,6 +60,9 @@ DJANGO_APPS = [
 
 PROJECT_APPS = [
     'accounts',
+    'stores',
+    'reservations',
+    'records',
 ]
 
 THIRD_PARTY_APPS = [
@@ -105,16 +108,16 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-ENVIRONMENT = os.getenv('DJANGO_ENV', 'local')  # 기본값은 development
+ENVIRONMENT = os.getenv('DJANGO_ENV', 'development')  # 기본값은 development
 
 DB_DEV_PW = get_secret("DB_DEV_PW") #개발용 DB 비밀번호
 DB_DEP_PW = get_secret("DB_DEP_PW") #배포용 DB 비밀번호
 
 DATABASES = {
-    'local': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    },
+    # 'local': {
+    #     'ENGINE': 'django.db.backends.sqlite3',
+    #     'NAME': BASE_DIR / 'db.sqlite3',
+    # },
     'development': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': "buynow_dev",  # 개발용 DB 이름

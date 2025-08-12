@@ -1,0 +1,76 @@
+from django.db import models
+from accounts.models import User, BaseModel
+
+class Store(BaseModel):
+    CATEGORY_CHOICES = (
+        ('카페', '카페'),
+        ('헤어샵', '헤어샵'),
+        ('회의실', '회의실'),
+    )
+    store_id = models.AutoField(primary_key=True)
+    store_name = models.CharField(max_length=100)
+    store_owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='stores')
+    store_category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    store_description = models.TextField(blank=True)
+    store_address = models.CharField(max_length=200)
+    store_image_url = models.TextField(blank=True) #TODO url은 URLField 쓰는 거 어떨까
+    is_active = models.BooleanField(default=True)
+
+class StoreSpace(BaseModel):
+    space_id = models.AutoField(primary_key=True)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='spaces')
+    space_name = models.CharField(max_length=100)
+    space_image_url = models.TextField(blank=True) #TODO url...
+    space_description = models.TextField(blank=True)
+
+class StoreMenu(BaseModel):
+    menu_id = models.AutoField(primary_key=True)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='menus')
+    menu_name = models.CharField(max_length=100)
+    menu_image_url = models.TextField(blank=True) #TODO url...
+    menu_cost_price = models.PositiveIntegerField() #원가
+    menu_price = models.PositiveIntegerField() #정가
+
+class StoreMenuSpace(BaseModel):
+    sms_id = models.AutoField(primary_key=True)
+    menu = models.ForeignKey(StoreMenu, on_delete=models.CASCADE)
+    space = models.ForeignKey(StoreSpace, on_delete=models.CASCADE)
+    class Meta:
+        unique_together = ('menu', 'space')
+
+class StoreOperatingHour(BaseModel):
+    DAY_CHOICES = [
+        ('Mon', '월'), ('Tue', '화'), ('Wed', '수'),
+        ('Thu', '목'), ('Fri', '금'), ('Sat', '토'), ('Sun', '일'),
+    ]
+    operating_hour_id = models.AutoField(primary_key=True)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE)
+    day_of_week = models.CharField(max_length=10, choices=DAY_CHOICES)
+    open_time = models.PositiveSmallIntegerField()
+    close_time = models.PositiveSmallIntegerField()
+    class Meta:
+        unique_together = ('store', 'day_of_week')
+
+class StoreItem(BaseModel):
+    item_id = models.AutoField(primary_key=True)
+    menu = models.ForeignKey(StoreMenu, on_delete=models.CASCADE)
+    space = models.ForeignKey(StoreSpace, on_delete=models.CASCADE)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE)
+    item_reservation_date = models.DateField()
+    item_reservation_day = models.CharField(max_length=10)
+    item_reservation_time = models.PositiveSmallIntegerField()  # 0~23
+    item_stock = models.IntegerField(default=1)  # 0 또는 1
+    current_discount_rate = models.FloatField(default=0.0)
+    max_discount_rate = models.FloatField(default=0.3)
+    class Meta:
+        unique_together = ('menu', 'space', 'item_reservation_date', 'item_reservation_day', 'item_reservation_time')
+
+class StoreSlot(BaseModel):
+    slot_id = models.AutoField(primary_key=True)
+    space = models.ForeignKey(StoreSpace, on_delete=models.CASCADE)
+    slot_reservation_date = models.DateField()
+    slot_reservation_time = models.PositiveSmallIntegerField()
+    is_reserved = models.BooleanField(default=False)
+    class Meta:
+        unique_together = ('space', 'slot_reservation_date', 'slot_reservation_time')
+#TODO 검토필요
