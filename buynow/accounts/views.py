@@ -177,7 +177,6 @@ class UserDetail(APIView):
         serializer = UserSerializer(user)
         return Response(serializer.data)
     
-    permission_classes = [IsAdminRole]
     @swagger_auto_schema(
         operation_summary = "User 단일 삭제",
         operation_description = "해당 id의 User을 삭제합니다.",
