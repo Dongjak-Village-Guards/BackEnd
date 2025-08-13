@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from rest_framework.generics import get_object_or_404
 
 from .models import User
 from .serializers import GoogleLoginSerializer, AdminLoginSerializer, UserSerializer
@@ -163,3 +164,42 @@ class UserList(APIView):
         users = User.objects.all()
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
+    
+class UserDetail(APIView):
+    permission_classes = [IsAdminRole]
+    @swagger_auto_schema(
+        operation_summary = "User 단일 조회",
+        operation_description = "해당 id의 User을 조회합니다.",
+        responses={200: UserSerializer, 400: "user_id Path 파라미터가 필요합니다.", 404: "존재하지 않는 User"}
+    )
+    def get(self, request, user_id):
+        user = get_object_or_404(User, id = user_id)
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+    
+    permission_classes = [IsAdminRole]
+    @swagger_auto_schema(
+        operation_summary = "User 단일 삭제",
+        operation_description = "해당 id의 User을 삭제합니다.",
+        responses={204: "삭제 완료" , 400: "user_id 가 필요합니다.", 404: "존재하지 않는 User"}
+    )
+    def delete(self, request,user_id):
+        user = get_object_or_404(User, id = user_id)
+        user.delete()
+        return Response(status = status.HTTP_204_NO_CONTENT)
+    
+class UserMe(APIView):
+    permission_classes = [IsUserRole]
+    @swagger_auto_schema(
+        operation_summary = "User 본인 조회",
+        operation_description = "User 본인의 정보를 조회합니다.",
+        responses={200: UserSerializer, 401: "인증이 필요합니다."}
+    )
+    def get(self, request):
+        user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+    
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+    
