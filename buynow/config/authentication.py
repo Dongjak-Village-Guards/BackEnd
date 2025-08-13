@@ -41,8 +41,10 @@ class FirebaseIDTokenAuthentication(BaseAuthentication):
 
         try:
             email, image_url = verify_firebase_id_token(id_token)
-        except AuthenticationFailed as e:
-            raise AuthenticationFailed(f"Invalid Firebase ID token: {str(e)}")
-        
+        except AuthenticationFailed:
+            raise
+        except Exception as e:
+            raise AuthenticationFailed(str(e))
+    
         user, _ = User.objects.get_or_create(user_email=email, defaults={'user_image_url' : image_url}) # User 테이블에서 email 조건에 맞는 레코드를 가져옴 -> 없으면 새로 생성&저장
         return (user, None)  # authenticate 함수는 (user, auth) 튜플 반환해야 함

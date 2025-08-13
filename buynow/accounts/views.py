@@ -8,8 +8,10 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from config.authentication import FirebaseIDTokenAuthentication
 
 from .models import User
+from .serializers import *
 
 import uuid
 #import jwt
@@ -35,8 +37,11 @@ class IsOwnerRole(BasePermission):
 
 # Create your views here.
 
+
+# 로그인 & 토큰 관련 view ------------------------------------
 # 구글 로그인 기능 (Firebase 토큰 받아 사용자 생성or로그인)
 class GoogleLoginAPIView(APIView):
+    authentication_classes = [FirebaseIDTokenAuthentication]
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(
@@ -151,8 +156,8 @@ class TokenRefreshAPIView(APIView):
         
         try:
             refresh = RefreshToken(refresh_token)
-            user_id = refresh['user_id']  # 토큰 payload에서 user_id 가져오기
-            user = User.objects.get(user_id=user_id)
+            user_id = refresh['id']  # 토큰 payload에서 id 가져오기
+            user = User.objects.get(id=user_id)
 
             if user.user_role not in ['admin', 'customer', 'owner']:
                 return Response({"error": "권한 없음"}, status=status.HTTP_403_FORBIDDEN)
@@ -162,3 +167,22 @@ class TokenRefreshAPIView(APIView):
             return Response({"access_token": access_token}, status=status.HTTP_200_OK)
         except TokenError as e:
             return Response({"error": "Invalid or expired refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+
+# User api 관련 -----------------------------------------------------
+# User 전체 조회
+class UserList(APIView):
+    # permission_classes = [IsAdminRole]
+    @swagger_auto_schema(
+        operation_summary = "User 목록 조회",
+        operation_description = "모든 User을 조회합니다.",
+        responses={200: UserSerializer(many=True)}
+    )
+    def get(self,request):
+        print('asfsd')
+        user_id = request.user.id
+        print(user_id)
+        users = User.objects.all()
+        #print(users)
+        serializer = UserSerializer(users,many=True)
+        return Response(serializer.data)

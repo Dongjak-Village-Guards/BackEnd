@@ -26,6 +26,7 @@ def get_secret(setting, secrets=secrets):
 
 ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
 
+# 로그인 관련 시리얼라지어 ---------------------------------------
 # 구글 소셜 로그인 시리얼라이저
 class GoogleLoginSerializer(serializers.Serializer):
     admin_password = serializers.CharField(write_only=True, required=True)
@@ -61,6 +62,8 @@ class GoogleLoginSerializer(serializers.Serializer):
 
     def _generate_tokens(self, user):
         refresh = RefreshToken.for_user(user)
+        # user_id claim을 정수로 넣기
+        refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
         return str(refresh.access_token), str(refresh)
 
 # 관리자 로그인용 시리얼라이저
@@ -107,4 +110,23 @@ class AdminLoginSerializer(serializers.Serializer):
     
     def _generate_tokens(self,user):
         refresh = RefreshToken.for_user(user)
+        # user_id claim을 정수로 넣기
+        refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
         return str(refresh.access_token), str(refresh)
+    
+
+# User API 관련 시리얼라이저 --------------------------------------------
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'user_email',
+            'user_image_url',
+            'user_role',
+            'user_address',
+            'user_discounted_cost_sum',
+            'created_at',
+            'updated_at',
+            'is_dummy'
+        ]
