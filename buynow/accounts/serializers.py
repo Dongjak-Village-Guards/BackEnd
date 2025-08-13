@@ -1,16 +1,15 @@
 from rest_framework import serializers
 from .models import User
 from django.contrib.auth.hashers import make_password
-from django.conf import settings
-import jwt
-import os,json
-import datetime
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.core.exceptions import ImproperlyConfigured
+from config.authentication import verify_firebase_id_token
+from django.conf import settings
+import os, json
 from pathlib import Path
-
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
 secret_file = os.path.join(BASE_DIR, 'secrets.json') 
 
 with open(secret_file) as f:
@@ -26,17 +25,11 @@ def get_secret(setting, secrets=secrets):
 
 ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
 
-# 로그인 관련 시리얼라지어 ---------------------------------------
-# 구글 소셜 로그인 시리얼라이저
 class GoogleLoginSerializer(serializers.Serializer):
-    admin_password = serializers.CharField(write_only=True, required=True)
-    id_token = serializers.CharField(write_only=True, required=True)
+    id_token = serializers.CharField(write_only=True)
     user_role = serializers.CharField(required=False)
 
-    # 검증 후 토큰 발급
     def create(self, validated_data):
-        # firebase 토큰 검증
-        from config.authentication import verify_firebase_id_token
         email, image_url = verify_firebase_id_token(validated_data['id_token'])
         role = validated_data.get('user_role', 'customer')
 
@@ -45,75 +38,42 @@ class GoogleLoginSerializer(serializers.Serializer):
             defaults={
                 'user_image_url': image_url,
                 'user_role': role,
-                # 비밀번호 없이 "" 저장하지만 해싱
-                'user_password': make_password("")
+                'user_password': make_password(""),
             }
         )
 
-        # JWT Access & Refresh Token 발급
         access_token, refresh_token = self._generate_tokens(user)
-
-        return {
-            "user": user,
-            "created": created,
-            "access_token": access_token,
-            "refresh_token": refresh_token
-        }
+        return {"user": user, "created": created, "access_token": access_token, "refresh_token": refresh_token}
 
     def _generate_tokens(self, user):
         refresh = RefreshToken.for_user(user)
-        # user_id claim을 정수로 넣기
-        # refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
         return str(refresh.access_token), str(refresh)
 
-# 관리자 로그인용 시리얼라이저
 class AdminLoginSerializer(serializers.Serializer):
-    admin_email = serializers.CharField(required=True)
-    admin_password = serializers.CharField(write_only=True, required = True)
-    user_password = serializers.CharField(required=True)
-    user_role = serializers.CharField(required = True)
-
-    """class Meta:
-        model = User
-
-        fields = ['admin_password','user_password','user_role']"""
+    admin_email = serializers.CharField()
+    admin_password = serializers.CharField(write_only=True)
+    user_password = serializers.CharField(write_only=True)
+    user_role = serializers.CharField()
 
     def validate(self, attrs):
-        role = attrs.get('user_role')
-        password = attrs.get('admin_password')
-        if role != 'admin':
-            raise serializers.ValidationError("관리자 로그인을 위해 user_role은 'admin'이어야 합니다.")
-        
-        if password != ADMIN_PASSWORD:
-            raise serializers.ValidationError("관리자 비밀번호가 일치하지 않습니다.")
+        if attrs.get('user_role') != 'admin':
+            raise serializers.ValidationError("user_role은 'admin'이어야 합니다.")
+        if attrs.get('admin_password') != ADMIN_PASSWORD:
+            raise serializers.ValidationError("관리자 비밀번호 불일치")
         return attrs
-        
-    def create(self,validated_data):
+
+    def create(self, validated_data):
         user_password = make_password(validated_data['user_password'])
         user, created = User.objects.get_or_create(
-            user_email = validated_data['admin_email'],
-            defaults={
-                'user_role' : 'admin',
-                'user_password' : user_password
-            }
+            user_email=validated_data['admin_email'],
+            defaults={'user_role': 'admin', 'user_password': user_password, 'is_staff': True, 'is_superuser': True}
         )
-
-        # JWT Access & Refresh Token 발급
         access_token, refresh_token = self._generate_tokens(user)
+        return {"user": user, "created": created, "access_token": access_token, "refresh_token": refresh_token}
 
-        return {
-            "user": user,
-            "created": created,
-            "access_token": access_token,
-            "refresh_token": refresh_token
-        }
-    
-    def _generate_tokens(self,user):
+    def _generate_tokens(self, user):
         refresh = RefreshToken.for_user(user)
-        # user_id claim을 정수로 넣기
-        # refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
         return str(refresh.access_token), str(refresh)
-    
 
 # User API 관련 시리얼라이저 --------------------------------------------
 class UserSerializer(serializers.ModelSerializer):

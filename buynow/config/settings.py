@@ -222,4 +222,6 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': False,
     'AUTH_HEADER_TYPES': ('Bearer', 'JWT'),
     'TOKEN_USER_CLASS': 'accounts.User',
+
 }
+AUTH_USER_MODEL = 'accounts.User'

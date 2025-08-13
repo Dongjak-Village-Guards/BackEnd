@@ -1,17 +1,32 @@
 import uuid
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser
-# Create your models here.
-# 추상 클래스 정의
-class BaseModel(models.Model): # models.Model을 상속받음
-    created_at = models.DateTimeField(auto_now_add=True) # 객체를 생성할 때 날짜와 시간 저장
-    updated_at = models.DateTimeField(auto_now=True) # 객체를 저장할 때 날짜와 시간 갱신
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.auth.hashers import make_password
+
+class UserManager(BaseUserManager):
+    def create_user(self, user_email, password=None, **extra_fields):
+        if not user_email:
+            raise ValueError("Email은 필수입니다.")
+        user = self.model(user_email=self.normalize_email(user_email), **extra_fields)
+        user.user_password = make_password(password) if password else ""
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, user_email, password, **extra_fields):
+        extra_fields.setdefault('user_role', 'admin')
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(user_email, password, **extra_fields)
+
+class BaseModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         abstract = True
 
-# User 모델 정의
-class User(BaseModel):
+
+class User(AbstractBaseUser, PermissionsMixin, BaseModel):
     ROLE_CHOICES = (
         ('admin', 'Admin'),
         ('customer', 'Customer'),
@@ -19,17 +34,20 @@ class User(BaseModel):
     )
 
     id = models.BigAutoField(primary_key=True)
-    user_email = models.EmailField(unique = True) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
-    user_image_url = models.TextField(blank = True)
-    user_password = models.CharField(max_length=10, default = "") # 나중에 해시 처리해서 DB에 저장해야 함. (Abstract 그걸로 바꾸면 해시 처리 해주는게 내장되어 있다고 함)
-    user_role = models.CharField(max_length = 20, choices = ROLE_CHOICES, default = 'customer')
-    user_address = models.CharField(blank = True, max_length = 100) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
-    user_discounted_cost_sum = models.IntegerField(default = 0)
-    is_dummy = models.BooleanField(default=False) # 더미 데이터 확인용
+    user_email = models.EmailField(unique=True)
+    user_image_url = models.TextField(blank=True)
+    user_password = models.CharField(max_length=128, default="")
+    user_role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='customer')
+    user_address = models.CharField(blank=True, max_length=100)
+    user_discounted_cost_sum = models.IntegerField(default=0)
+    is_dummy = models.BooleanField(default=False)
+    is_staff = models.BooleanField(default=False)  # 관리자 사이트 접근용
+    is_active = models.BooleanField(default=True)
+
+    objects = UserManager()
+
+    USERNAME_FIELD = 'user_email'
+    REQUIRED_FIELDS = []
 
     def __str__(self):
-        return f"{self.email} ({self.role})"
-    #@property
-    #def id(self):
-        #return self.id
-    
+        return f"{self.user_email} ({self.user_role})"

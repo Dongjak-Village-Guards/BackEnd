@@ -1,54 +1,46 @@
-from django.shortcuts import render
-from rest_framework.decorators import api_view,permission_classes
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework_simplejwt.authentication import JWTAuthentication
-
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from config.authentication import FirebaseIDTokenAuthentication
 
 from .models import User
-from .serializers import *
+from .serializers import GoogleLoginSerializer, AdminLoginSerializer, UserSerializer
+from config.authentication import FirebaseIDTokenAuthentication
 
-import uuid
-#import jwt
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework_simplejwt.exceptions import TokenError
 
-from .serializers import GoogleLoginSerializer, AdminLoginSerializer
-
-from rest_framework.permissions import BasePermission
-
+# ----------------------------
+# 권한 클래스
+# ----------------------------
 class IsAdminRole(BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.user_role == 'admin'
 
 class IsUserRole(BasePermission):
     allowed_roles = ['admin', 'customer']
-
     def has_permission(self, request, view):
         return request.user and request.user.user_role in self.allowed_roles
-
 
 class IsOwnerRole(BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.user_role == 'owner'
 
-# Create your views here.
+# ----------------------------
+# 로그인 & 토큰 관련 view
+# ----------------------------
 
-
-# 로그인 & 토큰 관련 view ------------------------------------
-# 구글 로그인 기능 (Firebase 토큰 받아 사용자 생성or로그인)
+# Google 로그인
 class GoogleLoginAPIView(APIView):
-    authentication_classes = [FirebaseIDTokenAuthentication]
+    authentication_classes = [FirebaseIDTokenAuthentication]  # Firebase 토큰만 인증
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         operation_summary="Google 로그인",
-        operation_description="Firebase에서 받은 id_token으로 로그인/회원가입 처리 후 JWT 토큰 반환",
+        operation_description="Firebase id_token으로 로그인/회원가입 후 JWT 토큰 발급",
         request_body=GoogleLoginSerializer,
         responses={
             200: openapi.Response(
@@ -65,7 +57,7 @@ class GoogleLoginAPIView(APIView):
                     }
                 )
             ),
-            400: "유효하지 않은 요청 (id_token 누락 등)"
+            400: "유효하지 않은 요청"
         }
     )
     def post(self, request):
@@ -77,31 +69,23 @@ class GoogleLoginAPIView(APIView):
         created = result["created"]
         message = "회원가입 성공" if created else "로그인 성공"
 
-        res = Response(
-            {
-                "message": message,
-                "user_email": user.user_email,
-                "user_image_url": user.user_image_url,
-                "user_role": user.user_role,
-                "access_token": result["access_token"],
-                "refresh_token": result["refresh_token"]
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({
+            "message": message,
+            "user_email": user.user_email,
+            "user_image_url": user.user_image_url,
+            "user_role": user.user_role,
+            "access_token": result["access_token"],
+            "refresh_token": result["refresh_token"]
+        }, status=status.HTTP_200_OK)
 
-        # 쿠키 저장
-        #res.set_cookie("access_token", result["access_token"], httponly=True, secure=True, samesite="Strict")
-        #res.set_cookie("refresh_token", result["refresh_token"], httponly=True, secure=True, samesite="Strict")
-
-        return res
-    
-# admin 로그인 기능
+# Admin 로그인
 class AdminLoginAPIView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # JWT 필요 없음
 
     @swagger_auto_schema(
         operation_summary="Admin 로그인",
-        operation_description="관리자 로그인/회원가입 처리 후 JWT 토큰 반환",
+        operation_description="관리자 로그인/회원가입 후 JWT 토큰 발급",
         request_body=AdminLoginSerializer,
         responses={
             200: openapi.Response(
@@ -116,12 +100,12 @@ class AdminLoginAPIView(APIView):
                     }
                 )
             ),
-            400: "유효하지 않은 요청 (누락 등)",
-            403: "관리자 권한 없음(password 불일치)"
+            400: "유효하지 않은 요청",
+            403: "관리자 권한 없음"
         }
     )
-    def post(self,request):
-        serializer = AdminLoginSerializer(data = request.data)
+    def post(self, request):
+        serializer = AdminLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
 
@@ -129,21 +113,13 @@ class AdminLoginAPIView(APIView):
         created = result["created"]
         message = "회원가입 성공" if created else "로그인 성공"
 
-        res = Response(
-            {
-                "message": message,
-                "user_role": user.user_role,
-                "access_token": result["access_token"],
-                "refresh_token": result["refresh_token"]
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({
+            "message": message,
+            "user_role": user.user_role,
+            "access_token": result["access_token"],
+            "refresh_token": result["refresh_token"]
+        }, status=status.HTTP_200_OK)
 
-        # 쿠키 저장
-        #res.set_cookie("access_token", result["access_token"], httponly=True, secure=True, samesite="Strict")
-        #res.set_cookie("refresh_token", result["refresh_token"], httponly=True, secure=True, samesite="Strict")
-
-        return res
 
 # 공급자 로그인 기능
 
@@ -171,21 +147,19 @@ class TokenRefreshAPIView(APIView):
             return Response({"error": "Invalid or expired refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
         
 
-# User api 관련 -----------------------------------------------------
-# User 전체 조회
+# ----------------------------
+# User API
+# ----------------------------
 class UserList(APIView):
-    authentication_classes = [JWTAuthentication]
-    # permission_classes = [IsAdminRole]
+    authentication_classes = [JWTAuthentication]  # JWT 토큰 인증
+    permission_classes = [IsAdminRole]  # 관리자만 접근 가능
+
     @swagger_auto_schema(
-        operation_summary = "User 목록 조회",
-        operation_description = "모든 User을 조회합니다.",
+        operation_summary="User 목록 조회",
+        operation_description="모든 사용자 조회 (관리자 전용)",
         responses={200: UserSerializer(many=True)}
     )
-    def get(self,request):
-        print('asfsd')
-        # user_id = request.user.id
-        # print(user_id)
+    def get(self, request):
         users = User.objects.all()
-        #print(users)
-        serializer = UserSerializer(users,many=True)
+        serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
