@@ -186,6 +186,8 @@ CORS_ALLOWEDORIGINS = {
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://buynow.n-e.kr",
+    "https://buynow.n-e.kr",
+    "https://dongjak.netlify.app",
 }
 pymysql.install_as_MySQLdb()
 
