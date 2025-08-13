@@ -16,6 +16,8 @@ from django.core.exceptions import ImproperlyConfigured
 
 import pymysql
 
+from datetime import timedelta
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -67,6 +69,7 @@ THIRD_PARTY_APPS = [
     'storages', #S3
     'drf_yasg',  # Swagger
     'rest_framework', # DRF 관련 django rest framework
+    'rest_framework_simplejwt', # jwt
 ]
 
 
@@ -181,6 +184,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWEDORIGINS = {
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://dongjak.netlify.app", # 프론트 도메인
 }
 pymysql.install_as_MySQLdb()
 
@@ -201,8 +205,19 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'config.authentication.FirebaseIDTokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',  # 필요시
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+}
+
+REST_USE_JWT = True
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=120),    # 유효기간 120시간 (개발중이라 길게함. 나중에 꼭 줄여놔야해!!)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # 유효기간 7일
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'TOKEN_USER_CLASS': 'accounts.User',
 }
