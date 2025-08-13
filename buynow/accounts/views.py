@@ -134,7 +134,7 @@ class TokenRefreshAPIView(APIView):
         
         try:
             refresh = RefreshToken(refresh_token)
-            user_id = refresh['id']  # 토큰 payload에서 id 가져오기
+            user_id = refresh['user_id']  # 토큰 payload에서 id 가져오기
             user = User.objects.get(id=user_id)
 
             if user.user_role not in ['admin', 'customer', 'owner']:
