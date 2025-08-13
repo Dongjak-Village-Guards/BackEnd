@@ -6,6 +6,8 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from config.authentication import FirebaseIDTokenAuthentication
@@ -172,6 +174,7 @@ class TokenRefreshAPIView(APIView):
 # User api 관련 -----------------------------------------------------
 # User 전체 조회
 class UserList(APIView):
+    authentication_classes = [JWTAuthentication]
     # permission_classes = [IsAdminRole]
     @swagger_auto_schema(
         operation_summary = "User 목록 조회",
@@ -180,8 +183,8 @@ class UserList(APIView):
     )
     def get(self,request):
         print('asfsd')
-        user_id = request.user.id
-        print(user_id)
+        # user_id = request.user.id
+        # print(user_id)
         users = User.objects.all()
         #print(users)
         serializer = UserSerializer(users,many=True)

@@ -136,7 +136,7 @@ DATABASES = {
     },
 }
 # 환경에 맞는 DB 설정을 'default'로 지정
-DATABASES['default'] = DATABASES.get(ENVIRONMENT)
+DATABASES['default'] = DATABASES.get('local')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -205,14 +205,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         #'config.authentication.FirebaseIDTokenAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',  # 필요시
     ],
     # 'DEFAULT_PERMISSION_CLASSES': [
     #     'rest_framework.permissions.IsAuthenticated',
     # ],
 }
-
-AUTH_USER_MODEL = 'accounts.User'
 
 REST_USE_JWT = True
 
@@ -221,7 +220,6 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # 유효기간 7일
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
+    'AUTH_HEADER_TYPES': ('Bearer', 'JWT'),
     'TOKEN_USER_CLASS': 'accounts.User',
-    'USER_ID_FIELD': 'id',        # 모델 PK
-    'USER_ID_CLAIM': 'id',        # JWT payload에 저장될 claim
 }

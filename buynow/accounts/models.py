@@ -1,7 +1,6 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser
-
 # Create your models here.
 # 추상 클래스 정의
 class BaseModel(models.Model): # models.Model을 상속받음
@@ -12,14 +11,14 @@ class BaseModel(models.Model): # models.Model을 상속받음
         abstract = True
 
 # User 모델 정의
-class User(AbstractBaseUser, BaseModel):
+class User(BaseModel):
     ROLE_CHOICES = (
         ('admin', 'Admin'),
         ('customer', 'Customer'),
         ('owner', 'Owner'),
     )
 
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     user_email = models.EmailField(unique = True) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
     user_image_url = models.TextField(blank = True)
     user_password = models.CharField(max_length=10, default = "") # 나중에 해시 처리해서 DB에 저장해야 함. (Abstract 그걸로 바꾸면 해시 처리 해주는게 내장되어 있다고 함)
@@ -30,7 +29,7 @@ class User(AbstractBaseUser, BaseModel):
 
     def __str__(self):
         return f"{self.email} ({self.role})"
-    @property
-    def id(self):
-        return self.id
+    #@property
+    #def id(self):
+        #return self.id
     

@@ -63,7 +63,7 @@ class GoogleLoginSerializer(serializers.Serializer):
     def _generate_tokens(self, user):
         refresh = RefreshToken.for_user(user)
         # user_id claim을 정수로 넣기
-        refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
+        # refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
         return str(refresh.access_token), str(refresh)
 
 # 관리자 로그인용 시리얼라이저
@@ -111,7 +111,7 @@ class AdminLoginSerializer(serializers.Serializer):
     def _generate_tokens(self,user):
         refresh = RefreshToken.for_user(user)
         # user_id claim을 정수로 넣기
-        refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
+        # refresh['id'] = user.id  # 여기서 str() 쓰지 말고 int 유지
         return str(refresh.access_token), str(refresh)
     
 
