@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework_simplejwt.exceptions import TokenError
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -13,6 +15,23 @@ import uuid
 #import jwt
 
 from .serializers import GoogleLoginSerializer, AdminLoginSerializer
+
+from rest_framework.permissions import BasePermission
+
+class IsAdminRole(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.user_role == 'admin'
+
+class IsUserRole(BasePermission):
+    allowed_roles = ['admin', 'customer']
+
+    def has_permission(self, request, view):
+        return request.user and request.user.user_role in self.allowed_roles
+
+
+class IsOwnerRole(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.user_role == 'owner'
 
 # Create your views here.
 
@@ -120,3 +139,26 @@ class AdminLoginAPIView(APIView):
         return res
 
 # 공급자 로그인 기능
+
+# refresh로 access 토큰 재발급
+class TokenRefreshAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.data.get("refresh_token")
+        if not refresh_token:
+            return Response({"error": "refresh_token is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            refresh = RefreshToken(refresh_token)
+            user_id = refresh['user_id']  # 토큰 payload에서 user_id 가져오기
+            user = User.objects.get(user_id=user_id)
+
+            if user.user_role not in ['admin', 'customer', 'owner']:
+                return Response({"error": "권한 없음"}, status=status.HTTP_403_FORBIDDEN)
+
+
+            access_token = str(refresh.access_token)
+            return Response({"access_token": access_token}, status=status.HTTP_200_OK)
+        except TokenError as e:
+            return Response({"error": "Invalid or expired refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
