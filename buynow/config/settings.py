@@ -185,6 +185,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWEDORIGINS = {
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://buynow.n-e.kr"
 }
 pymysql.install_as_MySQLdb()
 

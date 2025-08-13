@@ -15,6 +15,7 @@ class Store(BaseModel):
     store_address = models.CharField(max_length=200)
     store_image_url = models.TextField(blank=True) #TODO url은 URLField 쓰는 거 어떨까
     is_active = models.BooleanField(default=True)
+    is_dummy = models.BooleanField(default=False)
 
 class StoreSpace(BaseModel):
     space_id = models.AutoField(primary_key=True)
@@ -30,11 +31,13 @@ class StoreMenu(BaseModel):
     menu_image_url = models.TextField(blank=True) #TODO url...
     menu_cost_price = models.PositiveIntegerField() #원가
     menu_price = models.PositiveIntegerField() #정가
+    is_dummy = models.BooleanField(default=False)
 
 class StoreMenuSpace(BaseModel):
     sms_id = models.AutoField(primary_key=True)
     menu = models.ForeignKey(StoreMenu, on_delete=models.CASCADE)
     space = models.ForeignKey(StoreSpace, on_delete=models.CASCADE)
+    is_dummy = models.BooleanField(default=False)
     class Meta:
         unique_together = ('menu', 'space')
 
@@ -48,6 +51,7 @@ class StoreOperatingHour(BaseModel):
     day_of_week = models.CharField(max_length=10, choices=DAY_CHOICES)
     open_time = models.PositiveSmallIntegerField()
     close_time = models.PositiveSmallIntegerField()
+    is_dummy = models.BooleanField(default=False)
     class Meta:
         unique_together = ('store', 'day_of_week')
 
@@ -62,6 +66,7 @@ class StoreItem(BaseModel):
     item_stock = models.IntegerField(default=1)  # 0 또는 1
     current_discount_rate = models.FloatField(default=0.0)
     max_discount_rate = models.FloatField(default=0.3)
+    is_dummy = models.BooleanField(default=False)
     class Meta:
         unique_together = ('menu', 'space', 'item_reservation_date', 'item_reservation_day', 'item_reservation_time')
 
@@ -71,6 +76,7 @@ class StoreSlot(BaseModel):
     slot_reservation_date = models.DateField()
     slot_reservation_time = models.PositiveSmallIntegerField()
     is_reserved = models.BooleanField(default=False)
+    is_dummy = models.BooleanField(default=False)
     class Meta:
         unique_together = ('space', 'slot_reservation_date', 'slot_reservation_time')
 #TODO 검토필요

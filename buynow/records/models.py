@@ -9,6 +9,7 @@ class ItemRecord(BaseModel):
     record_stock = models.IntegerField() #당시 재고 0 또는 1
     record_item_price = models.PositiveIntegerField() #당시 정가(<- 정가가 바뀌지 않는 한 고정)
     record_discount_rate = models.FloatField() #당시 할인율
+    is_dummy = models.BooleanField(default=False)
     class Meta:
         unique_together = ('store_item_id', 'record_reservation_time', 'time_offset_idx')
     
