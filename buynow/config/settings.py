@@ -16,6 +16,8 @@ from django.core.exceptions import ImproperlyConfigured
 
 import pymysql
 
+from datetime import timedelta
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -72,7 +74,7 @@ THIRD_PARTY_APPS = [
     "storages",  # S3
     "drf_yasg",  # Swagger
     "rest_framework",  # DRF 관련 django rest framework
-    # 'rest_framework_simplejwt',
+    "rest_framework_simplejwt",  # jwt
 ]
 
 
@@ -210,28 +212,26 @@ AWS_S3_OBJECT_PARAMETERS = {
 ###REST_FRAMEWORK###
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "config.authentication.FirebaseIDTokenAuthentication",
+        #'config.authentication.FirebaseIDTokenAuthentication',
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",  # 필요시
     ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
+    # 'DEFAULT_PERMISSION_CLASSES': [
+    #     'rest_framework.permissions.IsAuthenticated',
+    # ],
 }
 
-# from datetime import timedelta
+REST_USE_JWT = True
 
-# REST_FRAMEWORK = {
-#     'DEFAULT_AUTHENTICATION_CLASSES': (
-#         'rest_framework_simplejwt.authentication.JWTAuthentication',
-#     ),
-# }
-
-# REST_USE_JWT = True
-
-# SIMPLE_JWT = {
-#     'ACCESS_TOKEN_LIFETIME': timedelta(hours=3),    # 유효기간 3시간
-#     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # 유효기간 7일
-#     'ROTATE_REFRESH_TOKENS': False, #TODO 이거 true로 해둬야 하나?
-#     'BLACKLIST_AFTER_ROTATION': False,
-#     'TOKEN_USER_CLASS': 'accounts.User',
-# }
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        hours=120
+    ),  # 유효기간 120시간 (개발중이라 길게함. 나중에 꼭 줄여놔야해!!)
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "AUTH_HEADER_TYPES": ("Bearer", "JWT"),
+    "TOKEN_USER_CLASS": "accounts.User",
+}
+AUTH_USER_MODEL = "accounts.User"
