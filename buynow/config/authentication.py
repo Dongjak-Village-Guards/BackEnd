@@ -63,7 +63,7 @@ import os  # ✅ 경로 처리를 위해 추가
 #   - Windows(PowerShell): $Env:FIREBASE_CREDENTIALS_PATH="C:\경로\파일명.json"
 # 2순위: 프로젝트 루트(BASE_DIR)에 있는 파일 사용
 BASE_DIR = os.path.dirname(os.path.abspath(os.path.join(__file__, '..', '..')))
-default_json_path = os.path.join(BASE_DIR, 'dongjak-village-guards-3cc0caa945e7.json')
+default_json_path = os.path.join(BASE_DIR,'buynow', 'dongjak-village-guards-3cc0caa945e7.json')
 
 FIREBASE_CRED_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH', default_json_path)
 

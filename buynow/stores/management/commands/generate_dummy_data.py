@@ -9,6 +9,68 @@ from stores.models import (
 )
 from reservations.models import Reservation, UserLike
 
+# dongjak_addresses = [
+# 이하 다 변경하기!
+#     "서울특별시 동작구 사당로 123",
+#     "서울특별시 동작구 보라매로 46",
+#     "서울특별시 동작구 상도로 85",
+#     "서울특별시 동작구 노량진로 210",
+#     "서울특별시 동작구 흑석로 45",
+#     "서울특별시 동작구 현충로 77",
+#     "서울특별시 동작구 동작대로 55",
+#     "서울특별시 동작구 신대방삼거리로 98",
+#     "서울특별시 동작구 동작대로 199",
+#     "서울특별시 동작구 봉천로 130",
+# ]
+
+# store_templates = [
+#     {
+#         "store_name": "멋진머리",
+#         "category": "헤어샵",
+#         "description": "도심 속 최고의 스타일리스트와 함께하는 헤어샵",
+#         "image_url": "https://example.com/images/hairshop_main.jpg",
+#         "spaces": [
+#             {
+#                 "space_name": "디자이너 1",
+#                 "description": "섬세한 손길의 전문가",
+#                 "image_url": "https://example.com/images/designer1.jpg"
+#             },
+#             {
+#                 "space_name": "디자이너 2",
+#                 "description": "트렌드를 선도하는 디자이너",
+#                 "image_url": "https://example.com/images/designer2.jpg"
+#             }
+#         ],
+#         "menus": [
+#             {"menu_name": "커트", "image_url": "https://example.com/images/cut.jpg", "cost_price": 8000, "price": 15000},
+#             {"menu_name": "파마", "image_url": "https://example.com/images/perma.jpg", "cost_price": 20000, "price": 45000},
+#             {"menu_name": "염색", "image_url": "https://example.com/images/dye.jpg", "cost_price": 15000, "price": 35000}
+#         ]
+#     },
+#     {
+#         "store_name": "달콤카페",
+#         "category": "카페",
+#         "description": "아늑하고 포근한 분위기의 카페",
+#         "image_url": "https://example.com/images/cafe_main.jpg",
+#         "spaces": [
+#             {
+#                 "space_name": "창가 자리",
+#                 "description": "햇살 가득한 창가 자리",
+#                 "image_url": "https://example.com/images/window_seat.jpg"
+#             },
+#             {
+#                 "space_name": "테라스 자리",
+#                 "description": "바람이 상쾌한 테라스 자리",
+#                 "image_url": "https://example.com/images/terrace.jpg"
+#             }
+#         ],
+#         "menus": [
+#             {"menu_name": "아메리카노", "image_url": "https://example.com/images/americano.jpg", "cost_price": 1000, "price": 4000},
+#             {"menu_name": "카페라떼", "image_url": "https://example.com/images/latte.jpg", "cost_price": 1300, "price": 4500}
+#         ]
+#     }
+# ]
+
 #TODO 주소값 실제데이터로 변경하기
 #TODO is_dummy 필드를 모델들에 포함시켜서 추후 삭제 가능하게 변경하기
 class Command(BaseCommand):
@@ -41,41 +103,66 @@ class Command(BaseCommand):
 
         # --- 기존 데이터 삭제 ---
         if not options['skip_delete']:
-            Reservation.objects.all().delete()
-            UserLike.objects.all().delete()
-            StoreOperatingHour.objects.all().delete()
-            StoreItem.objects.all().delete()
-            StoreSlot.objects.all().delete()
-            StoreMenuSpace.objects.all().delete()
-            StoreMenu.objects.all().delete()
-            StoreSpace.objects.all().delete()
-            Store.objects.all().delete()
-            # User 중 admin은 남기고 싶으면 여기 조건 변경
-            User.objects.exclude(user_role='admin').delete()
+            Reservation.objects.filter(is_dummy=True).delete()
+            UserLike.objects.filter(is_dummy=True).delete()
+            StoreOperatingHour.objects.filter(is_dummy=True).delete()
+            StoreItem.objects.filter(is_dummy=True).delete()
+            StoreSlot.objects.filter(is_dummy=True).delete()
+            StoreMenuSpace.objects.filter(is_dummy=True).delete()
+            StoreMenu.objects.filter(is_dummy=True).delete()
+            StoreSpace.objects.filter(is_dummy=True).delete()
+            Store.objects.filter(is_dummy=True).delete()
+            User.objects.filter(is_dummy=True).delete()#?
 
         # ⬅ 추가: 기존 고객 할인액 전부 0으로 초기화
         User.objects.filter(user_role='customer').update(user_discounted_cost_sum=0)
 
         # --- Users ---
         owners = [
+            # 가짜주소 버전
             User.objects.create(
                 user_email=faker.unique.email(),
                 user_image_url=faker.image_url(),
                 user_password=faker.password(),
                 user_role='owner',
                 user_address=faker.address(),
-                user_discounted_cost_sum=0
-            ) for _ in range(options['owners'])
+                user_discounted_cost_sum=0,
+                is_dummy=True   # 더미데이터 표시
+            )
+            # 진짜주소 버전
+            # User.objects.create(
+            #     user_email=faker.unique.email(),
+            #     user_image_url=faker.image_url(),
+            #     user_password=faker.password(),
+            #     user_role='owner',
+            #     user_address=random.choice(dongjak_addresses),
+            #     user_discounted_cost_sum=0,
+            #     is_dummy=True
+            # )
+            for _ in range(options['owners'])
         ]
         customers = [
+            # 가짜주소 버전
             User.objects.create(
                 user_email=faker.unique.email(),
                 user_image_url=faker.image_url(),
                 user_password=faker.password(),
                 user_role='customer',
                 user_address=faker.address(),
-                user_discounted_cost_sum=0
-            ) for _ in range(options['customers'])
+                user_discounted_cost_sum=0,
+                is_dummy=True   # 더미데이터 표시
+            ) 
+            # 진짜주소 버전
+            # User.objects.create(
+            #     user_email=faker.unique.email(),
+            #     user_image_url=faker.image_url(),
+            #     user_password=faker.password(),
+            #     user_role='customer',
+            #     user_address=random.choice(dongjak_addresses),
+            #     user_discounted_cost_sum=0,
+            #     is_dummy=True
+            # )
+            for _ in range(options['customers'])
         ]
 
         # --- Stores ---
@@ -83,6 +170,7 @@ class Command(BaseCommand):
         stores_per_owner = max(1, options['stores'] // len(owners))
         for owner in owners:
             for _ in range(stores_per_owner):
+                # 가짜주소 버전
                 store = Store.objects.create(
                     store_name=faker.company(),
                     store_owner=owner,
@@ -90,32 +178,81 @@ class Command(BaseCommand):
                     store_description=faker.text(),
                     store_address=faker.address(),
                     store_image_url=faker.image_url(),
-                    is_active=True
+                    is_active=True,
+                    is_dummy=True   # 더미데이터 표시
                 )
+                # 진짜주소 버전
+                # template = random.choice(store_templates)
+                # store = Store.objects.create(
+                #     store_name=template["store_name"],
+                #     store_owner=owner,
+                #     store_category=template["category"],
+                #     store_description=template["description"],
+                #     store_address=random.choice(dongjak_addresses),
+                #     store_image_url=template["image_url"],
+                #     is_active=True,
+                #     is_dummy=True
+                # )
                 stores.append(store)
 
         # --- StoreSpace / StoreMenu / StoreMenuSpace ---
         for store in stores:
+            # 가짜주소 버전
             spaces = [
                 StoreSpace.objects.create(
                     store=store,
                     space_name=faker.first_name(),
                     space_image_url=faker.image_url(),
-                    space_description=faker.text()
+                    space_description=faker.text(),
+                    is_dummy=True   # 더미데이터 표시
                 ) for _ in range(random.randint(2, 3))  # 최소 2개 공간
             ]
+            # 진짜주소 버전
+            # spaces = []
+            # for space_t in template["spaces"]:
+            #     spaces.append(StoreSpace.objects.create(
+            #         store=store,
+            #         space_name=space_t["space_name"],
+            #         space_image_url=space_t["image_url"],
+            #         space_description=space_t["description"],
+            #         is_dummy=True
+            #     ))
+            
+            # 가짜주소 버전
             menus = [
                 StoreMenu.objects.create(
                     store=store,
                     menu_name=faker.word(),
                     menu_image_url=faker.image_url(),
                     menu_cost_price=random.randint(3000, 8000),
-                    menu_price=random.randint(10000, 20000)
+                    menu_price=random.randint(10000, 20000),
+                    is_dummy=True   # 더미데이터 표시
                 ) for _ in range(random.randint(2, 4)) # 최소 2개 메뉴
             ]
+            # 진짜주소 버전
+            # menus = []
+            # for menu_t in template["menus"]:
+            #     menu = StoreMenu.objects.create(
+            #         store=store,
+            #         menu_name=menu_t["menu_name"],
+            #         menu_image_url=menu_t["image_url"],
+            #         menu_cost_price=menu_t["cost_price"],
+            #         menu_price=menu_t["price"],
+            #         is_dummy=True
+            #     )
+            #     for space in spaces:
+            #         StoreMenuSpace.objects.create(
+            #             menu=menu,
+            #             space=space,
+            #             is_dummy=True
+            #         )
             for menu in menus:
                 for space in spaces:
-                    StoreMenuSpace.objects.create(menu=menu, space=space)
+                    StoreMenuSpace.objects.create(
+                        menu=menu, 
+                        space=space,
+                        is_dummy=True   # 더미데이터 표시
+                    )
 
         # --- StoreItem / StoreSlot ---
         today = datetime.today().date()
@@ -135,7 +272,8 @@ class Command(BaseCommand):
                         # current_discount_rate=0.0, /또는
                         item_stock=random.choice([0, 1]),
                         current_discount_rate=round(random.uniform(0.0, 0.3), 2),
-                        max_discount_rate=0.3
+                        max_discount_rate=0.3,
+                        is_dummy=True   # 더미데이터 표시
                     )
 
         for space in StoreSpace.objects.all():
@@ -146,7 +284,8 @@ class Command(BaseCommand):
                         space=space,
                         slot_reservation_date=date,
                         slot_reservation_time=hour,
-                        is_reserved=False
+                        is_reserved=False,
+                        is_dummy=True   # 더미데이터 표시
                     )
 
         # --- Reservation 생성 (고객당 1~3개 랜덤) ---
@@ -171,7 +310,8 @@ class Command(BaseCommand):
                         user=customer,
                         store_item=item,
                         reservation_slot=slot,
-                        reservation_cost=discounted_price
+                        reservation_cost=discounted_price,
+                        is_dummy=True   # 더미데이터 표시
                     )
 
                     # 1) 고객 할인 금액 누적
@@ -203,7 +343,8 @@ class Command(BaseCommand):
             for store in liked_stores:
                 UserLike.objects.create(
                     user=customer,
-                    store=store
+                    store=store,
+                    is_dummy=True   # 더미데이터 표시
                 )
 
         # --- StoreOperatingHour (랜덤 오픈/마감) ---
@@ -215,7 +356,8 @@ class Command(BaseCommand):
                     store=store,
                     day_of_week=day,
                     open_time=open_time,
-                    close_time=close_time
+                    close_time=close_time,
+                    is_dummy=True   # 더미데이터 표시
                 )
 
-        self.stdout.write(self.style.SUCCESS("✅ 더미데이터 생성 완료 (재고/슬롯/할인/활성상태 반영)"))
+        self.stdout.write(self.style.SUCCESS("✅ 더미데이터 생성 완료 (is_dummy 추가, 아직 가짜주소!)"))

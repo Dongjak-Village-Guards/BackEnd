@@ -25,6 +25,7 @@ class User(BaseModel):
     user_role = models.CharField(max_length = 20, choices = ROLE_CHOICES, default = 'customer')
     user_address = models.CharField(blank = True, max_length = 100) # 'null=True' 이거는 넣을지말지 잘 모르겠어서 일단 제외
     user_discounted_cost_sum = models.IntegerField(default = 0)
+    is_dummy = models.BooleanField(default=False)  # 더미데이터 여부 표시 (True면 생성 스크립트에서 만든 데이터라는 뜻임)
 
     def __str__(self):
         return f"{self.user_email} ({self.user_role})"

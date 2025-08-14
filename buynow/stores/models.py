@@ -23,6 +23,7 @@ class StoreSpace(BaseModel):
     space_name = models.CharField(max_length=100)
     space_image_url = models.TextField(blank=True) #TODO url...
     space_description = models.TextField(blank=True)
+    is_dummy = models.BooleanField(default=False)  # 더미데이터 여부 표시
 
 class StoreMenu(BaseModel):
     menu_id = models.AutoField(primary_key=True)
