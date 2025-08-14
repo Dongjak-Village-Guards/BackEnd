@@ -4,8 +4,13 @@ from datetime import datetime, timedelta
 from faker import Faker
 from accounts.models import User
 from stores.models import (
-    Store, StoreSpace, StoreMenu, StoreMenuSpace,
-    StoreOperatingHour, StoreItem, StoreSlot
+    Store,
+    StoreSpace,
+    StoreMenu,
+    StoreMenuSpace,
+    StoreOperatingHour,
+    StoreItem,
+    StoreSlot,
 )
 from reservations.models import Reservation, UserLike
 
@@ -71,38 +76,49 @@ from reservations.models import Reservation, UserLike
 #     }
 # ]
 
-#TODO 주소값 실제데이터로 변경하기
-#TODO is_dummy 필드를 모델들에 포함시켜서 추후 삭제 가능하게 변경하기
+
+# TODO 주소값 실제데이터로 변경하기
+# TODO is_dummy 필드를 모델들에 포함시켜서 추후 삭제 가능하게 변경하기
 class Command(BaseCommand):
     help = "전체 더미데이터 생성 (ItemRecord 제외) - 완전 통합 버전"
 
     def add_arguments(self, parser):
-        parser.add_argument('--dev', action='store_true', help='개발 DB에 생성')
-        parser.add_argument('--prod', action='store_true', help='운영 DB에 생성 (확인 필요)')
-        parser.add_argument('--skip-delete', action='store_true', help='기존 데이터 삭제 없이 추가')
-        parser.add_argument('--owners', type=int, default=10)
-        parser.add_argument('--customers', type=int, default=10)
-        parser.add_argument('--stores', type=int, default=10)
-        parser.add_argument('--days', type=int, default=14)
-        parser.add_argument('--hours', nargs='+', type=int, default=list(range(24)), help='시간 슬롯 목록 (기본 0~23)')
+        parser.add_argument("--dev", action="store_true", help="개발 DB에 생성")
+        parser.add_argument(
+            "--prod", action="store_true", help="운영 DB에 생성 (확인 필요)"
+        )
+        parser.add_argument(
+            "--skip-delete", action="store_true", help="기존 데이터 삭제 없이 추가"
+        )
+        parser.add_argument("--owners", type=int, default=10)
+        parser.add_argument("--customers", type=int, default=10)
+        parser.add_argument("--stores", type=int, default=10)
+        parser.add_argument("--days", type=int, default=14)
+        parser.add_argument(
+            "--hours",
+            nargs="+",
+            type=int,
+            default=list(range(24)),
+            help="시간 슬롯 목록 (기본 0~23)",
+        )
 
     def handle(self, *args, **options):
-        if not options['dev'] and not options['prod']:
+        if not options["dev"] and not options["prod"]:
             raise CommandError("--dev 또는 --prod 옵션 중 하나를 지정하세요.")
 
-        if options['prod']:
+        if options["prod"]:
             self.stdout.write(self.style.WARNING("⚠ 운영 DB에서 실행됩니다."))
             confirm = input("정말 실행하시겠습니까? (YES 입력) : ")
             if confirm != "YES":
                 self.stdout.write(self.style.ERROR("취소됨"))
                 return
 
-        faker = Faker('ko_KR') #한국어로!
-        days = options['days']
-        hours = options['hours']
+        faker = Faker("ko_KR")  # 한국어로!
+        days = options["days"]
+        hours = options["hours"]
 
         # --- 기존 데이터 삭제 ---
-        if not options['skip_delete']:
+        if not options["skip_delete"]:
             Reservation.objects.filter(is_dummy=True).delete()
             UserLike.objects.filter(is_dummy=True).delete()
             StoreOperatingHour.objects.filter(is_dummy=True).delete()
@@ -112,10 +128,10 @@ class Command(BaseCommand):
             StoreMenu.objects.filter(is_dummy=True).delete()
             StoreSpace.objects.filter(is_dummy=True).delete()
             Store.objects.filter(is_dummy=True).delete()
-            User.objects.filter(is_dummy=True).delete()#?
+            User.objects.filter(is_dummy=True).delete()  # ?
 
         # ⬅ 추가: 기존 고객 할인액 전부 0으로 초기화
-        User.objects.filter(user_role='customer').update(user_discounted_cost_sum=0)
+        User.objects.filter(user_role="customer").update(user_discounted_cost_sum=0)
 
         # --- Users ---
         owners = [
@@ -124,11 +140,21 @@ class Command(BaseCommand):
                 user_email=faker.unique.email(),
                 user_image_url=faker.image_url(),
                 user_password=faker.password(),
-                user_role='owner',
+                user_role="owner",
                 user_address=faker.address(),
                 user_discounted_cost_sum=0,
-                is_dummy=True   # 더미데이터 표시
+                is_dummy=True,  # 더미데이터 표시
             )
+            # AbstractUser
+            # User.objects.create_user(
+            #     user_email=faker.unique.email(),
+            #     password="dummy_owner_pw",  # 해시 저장됨
+            #     user_image_url=faker.image_url(),
+            #     user_role="owner",
+            #     user_address=faker.address(),
+            #     user_discounted_cost_sum=0,
+            #     is_dummy=True,
+            # )
             # 진짜주소 버전
             # User.objects.create(
             #     user_email=faker.unique.email(),
@@ -139,7 +165,7 @@ class Command(BaseCommand):
             #     user_discounted_cost_sum=0,
             #     is_dummy=True
             # )
-            for _ in range(options['owners'])
+            for _ in range(options["owners"])
         ]
         customers = [
             # 가짜주소 버전
@@ -147,11 +173,21 @@ class Command(BaseCommand):
                 user_email=faker.unique.email(),
                 user_image_url=faker.image_url(),
                 user_password=faker.password(),
-                user_role='customer',
+                user_role="customer",
                 user_address=faker.address(),
                 user_discounted_cost_sum=0,
-                is_dummy=True   # 더미데이터 표시
-            ) 
+                is_dummy=True,  # 더미데이터 표시
+            )
+            # AbstractUser
+            # User.objects.create_user(
+            #     user_email=faker.unique.email(),
+            #     password="dummy_customer_pw",  # 해시 저장됨
+            #     user_image_url=faker.image_url(),
+            #     user_role="customer",
+            #     user_address=faker.address(),
+            #     user_discounted_cost_sum=0,
+            #     is_dummy=True,
+            # )
             # 진짜주소 버전
             # User.objects.create(
             #     user_email=faker.unique.email(),
@@ -162,24 +198,24 @@ class Command(BaseCommand):
             #     user_discounted_cost_sum=0,
             #     is_dummy=True
             # )
-            for _ in range(options['customers'])
+            for _ in range(options["customers"])
         ]
 
         # --- Stores ---
         stores = []
-        stores_per_owner = max(1, options['stores'] // len(owners))
+        stores_per_owner = max(1, options["stores"] // len(owners))
         for owner in owners:
             for _ in range(stores_per_owner):
                 # 가짜주소 버전
                 store = Store.objects.create(
                     store_name=faker.company(),
                     store_owner=owner,
-                    store_category=random.choice(['카페', '헤어샵', '회의실']),
+                    store_category=random.choice(["카페", "헤어샵", "회의실"]),
                     store_description=faker.text(),
                     store_address=faker.address(),
                     store_image_url=faker.image_url(),
                     is_active=True,
-                    is_dummy=True   # 더미데이터 표시
+                    is_dummy=True,  # 더미데이터 표시
                 )
                 # 진짜주소 버전
                 # template = random.choice(store_templates)
@@ -204,8 +240,9 @@ class Command(BaseCommand):
                     space_name=faker.first_name(),
                     space_image_url=faker.image_url(),
                     space_description=faker.text(),
-                    is_dummy=True   # 더미데이터 표시
-                ) for _ in range(random.randint(2, 3))  # 최소 2개 공간
+                    is_dummy=True,  # 더미데이터 표시
+                )
+                for _ in range(random.randint(2, 3))  # 최소 2개 공간
             ]
             # 진짜주소 버전
             # spaces = []
@@ -217,7 +254,7 @@ class Command(BaseCommand):
             #         space_description=space_t["description"],
             #         is_dummy=True
             #     ))
-            
+
             # 가짜주소 버전
             menus = [
                 StoreMenu.objects.create(
@@ -226,8 +263,9 @@ class Command(BaseCommand):
                     menu_image_url=faker.image_url(),
                     menu_cost_price=random.randint(3000, 8000),
                     menu_price=random.randint(10000, 20000),
-                    is_dummy=True   # 더미데이터 표시
-                ) for _ in range(random.randint(2, 4)) # 최소 2개 메뉴
+                    is_dummy=True,  # 더미데이터 표시
+                )
+                for _ in range(random.randint(2, 4))  # 최소 2개 메뉴
             ]
             # 진짜주소 버전
             # menus = []
@@ -249,9 +287,7 @@ class Command(BaseCommand):
             for menu in menus:
                 for space in spaces:
                     StoreMenuSpace.objects.create(
-                        menu=menu, 
-                        space=space,
-                        is_dummy=True   # 더미데이터 표시
+                        menu=menu, space=space, is_dummy=True  # 더미데이터 표시
                     )
 
         # --- StoreItem / StoreSlot ---
@@ -267,13 +303,13 @@ class Command(BaseCommand):
                         item_reservation_date=date,
                         item_reservation_day=date.strftime("%a"),
                         item_reservation_time=hour,
-                        #item_stock=random.choice([0,1]), /또는
-                        #item_stock=1,  # 항상 예약 가능
+                        # item_stock=random.choice([0,1]), /또는
+                        # item_stock=1,  # 항상 예약 가능
                         # current_discount_rate=0.0, /또는
                         item_stock=random.choice([0, 1]),
                         current_discount_rate=round(random.uniform(0.0, 0.3), 2),
                         max_discount_rate=0.3,
-                        is_dummy=True   # 더미데이터 표시
+                        is_dummy=True,  # 더미데이터 표시
                     )
 
         for space in StoreSpace.objects.all():
@@ -285,7 +321,7 @@ class Command(BaseCommand):
                         slot_reservation_date=date,
                         slot_reservation_time=hour,
                         is_reserved=False,
-                        is_dummy=True   # 더미데이터 표시
+                        is_dummy=True,  # 더미데이터 표시
                     )
 
         # --- Reservation 생성 (고객당 1~3개 랜덤) ---
@@ -300,18 +336,20 @@ class Command(BaseCommand):
                     space=item.space,
                     slot_reservation_date=item.item_reservation_date,
                     slot_reservation_time=item.item_reservation_time,
-                    is_reserved=False
+                    is_reserved=False,
                 ).first()
 
                 if slot:
                     # 할인 적용된 가격
-                    discounted_price = round(item.menu.menu_price * (1 - item.current_discount_rate))
+                    discounted_price = round(
+                        item.menu.menu_price * (1 - item.current_discount_rate)
+                    )
                     Reservation.objects.create(
                         user=customer,
                         store_item=item,
                         reservation_slot=slot,
                         reservation_cost=discounted_price,
-                        is_dummy=True   # 더미데이터 표시
+                        is_dummy=True,  # 더미데이터 표시
                     )
 
                     # 1) 고객 할인 금액 누적
@@ -342,22 +380,28 @@ class Command(BaseCommand):
             liked_stores = random.sample(stores, min(like_count, len(stores)))
             for store in liked_stores:
                 UserLike.objects.create(
-                    user=customer,
-                    store=store,
-                    is_dummy=True   # 더미데이터 표시
+                    user=customer, store=store, is_dummy=True  # 더미데이터 표시
                 )
 
         # --- StoreOperatingHour (랜덤 오픈/마감) ---
         for store in stores:
-            for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
-                open_time = random.randint(7, 10) # 7~10시
-                close_time = random.randint(18, 23) # 18~23시
+            for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+                open_time = random.randint(7, 10)  # 7~10시
+                close_time = random.randint(18, 23)  # 18~23시
                 StoreOperatingHour.objects.create(
                     store=store,
                     day_of_week=day,
                     open_time=open_time,
                     close_time=close_time,
-                    is_dummy=True   # 더미데이터 표시
+                    is_dummy=True,  # 더미데이터 표시
                 )
 
-        self.stdout.write(self.style.SUCCESS("✅ 더미데이터 생성 완료 (is_dummy 추가, 아직 가짜주소!)"))
+        self.stdout.write(
+            self.style.SUCCESS(
+                "✅ 더미데이터 생성 완료 (is_dummy 추가, 아직 가짜주소!)"
+            )
+        )
+
+
+# 실행 시 buynow % python manage.py generate_dummy_data --dev --owners 10 --customers 10 --stores 10 --days 14
+# 숫자는 상황에 맞게 변경 가능 (실행 전 상의 필수!)
