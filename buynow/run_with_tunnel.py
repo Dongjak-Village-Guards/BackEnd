@@ -47,6 +47,7 @@
 
 import subprocess
 import sys
+import time
 from sshtunnel import SSHTunnelForwarder
 import os
 import json
@@ -60,8 +61,9 @@ if not os.path.exists(SECRET_FILE):
     raise FileNotFoundError(f"[오류] secrets.json 파일이 없습니다: {SECRET_FILE}")
 
 # secrets.json 읽기
-with open(SECRET_FILE, 'r', encoding='utf-8') as f:
+with open(SECRET_FILE, "r", encoding="utf-8") as f:
     secrets = json.load(f)
+
 
 # secrets.json에서 값 가져오기
 def get_secret(key):
@@ -69,6 +71,7 @@ def get_secret(key):
         return secrets[key]
     except KeyError:
         raise Exception(f"[오류] secrets.json에 '{key}' 키가 없습니다.")
+
 
 EC2_HOST = get_secret("EC2_HOST")
 EC2_USER = get_secret("EC2_USER")
@@ -109,6 +112,7 @@ if __name__ == "__main__":
     ) as tunnel:
         print(f"[성공] SSH 터널 연결: localhost:{LOCAL_PORT} → {RDS_HOST}:{RDS_PORT}")
         try:
-            subprocess.run([sys.executable, "manage.py"] + sys.argv[1:], check=True)
-        except subprocess.CalledProcessError as e:
-            print("[오류] Django 명령어 실행 중 문제 발생:", e)
+            while True:
+                time.sleep(60)  # 60초마다 터널 유지
+        except KeyboardInterrupt:
+            print("SSH 터널 종료")

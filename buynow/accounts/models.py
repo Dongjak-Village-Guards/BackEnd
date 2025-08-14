@@ -13,7 +13,7 @@ class UserManager(BaseUserManager):
         if not user_email:
             raise ValueError("Email은 필수입니다.")
         user = self.model(user_email=self.normalize_email(user_email), **extra_fields)
-        user.user_password = make_password(password) if password else ""
+        user.password = make_password(password) if password else ""
         user.save(using=self._db)
         return user
 
@@ -42,7 +42,7 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
     id = models.BigAutoField(primary_key=True)
     user_email = models.EmailField(unique=True)
     user_image_url = models.TextField(blank=True)
-    user_password = models.CharField(max_length=128, default="")
+    password = models.CharField(max_length=128, default="")
     user_role = models.CharField(
         max_length=20, choices=ROLE_CHOICES, default="customer"
     )
