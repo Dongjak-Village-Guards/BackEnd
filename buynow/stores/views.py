@@ -9,7 +9,7 @@ import math
 import requests  # 외부 api 호출용
 import random  # 더미 데이터 랜덤 선택용!
 
-from .models import Store, StoreItem, StoreSpace
+from .models import Store, StoreItem, StoreSpace, StoreMenu, StoreMenuSpace
 from reservations.models import UserLike
 
 from rest_framework import status
@@ -17,6 +17,8 @@ from rest_framework import status
 # Swagger 관련 import
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+
+from datetime import datetime
 
 
 # 거리 계산 함수 (직선거리, haversine)
@@ -484,3 +486,187 @@ class StoreSpacesDetailView(APIView):
             )
 
         return Response(store_data, status=200)
+
+
+class StoreSpaceDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    @swagger_auto_schema(
+        operation_summary="특정 Space의 상세 정보 및 메뉴 정보 조회",
+        manual_parameters=[
+            openapi.Parameter(
+                "time",
+                openapi.IN_QUERY,
+                description="조회할 예약 시간 (0~23)",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="성공",
+                examples={
+                    "application/json": {
+                        "store_name": "가게 이름",
+                        "space_name": "Space 이름",
+                        "space_description": "Space 소개/설명",
+                        "selected_time": "13:00",
+                        "is_liked": False,
+                        "space_id": 3,
+                        "space_image_url": "https://example.com/space_image.jpg",
+                        "menus": [
+                            {
+                                "menu_id": 45,
+                                "menu_name": "coffee",
+                                "menu_image_url": "https://example.com/menu_coffee.jpg",
+                                "menu_price": 4500,
+                                "item_id": 101,
+                                "discount_rate": 15,
+                                "discounted_price": 3825,
+                                "is_available": True,
+                            },
+                            {
+                                "menu_id": 46,
+                                "menu_name": "tea",
+                                "menu_image_url": "https://example.com/menu_tea.jpg",
+                                "menu_price": 3000,
+                                "item_id": 102,
+                                "discount_rate": 20,
+                                "discounted_price": 2400,
+                                "is_available": True,
+                            },
+                        ],
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="잘못된 요청",
+                examples={
+                    "application/json": {
+                        "error": "`time` query parameter는 필수이며 정수여야 합니다."
+                    }
+                },
+            ),
+            404: openapi.Response(
+                description="Space 없음 또는 메뉴 없음",
+                examples={
+                    "application/json": {
+                        "errorCode": "SPACE_NOT_FOUND",
+                        "message": "공간(space_id)을 찾을 수 없습니다.",
+                    }
+                },
+            ),
+        },
+    )
+    def get(self, request, space_id):
+        # time 쿼리 파라미터 확인 및 검증
+        time_param = request.GET.get("time")
+        try:
+            time_int = int(time_param)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "`time` query parameter는 필수이며 정수여야 합니다."},
+                status=400,
+            )
+        if not 0 <= time_int <= 23:
+            return Response({"error": "`time`은 0과 23 사이여야 합니다."}, status=400)
+
+        try:
+            space = StoreSpace.objects.get(pk=space_id)
+        except StoreSpace.DoesNotExist:
+            return Response(
+                {
+                    "errorCode": "SPACE_NOT_FOUND",
+                    "message": "공간(space_id)을 찾을 수 없습니다.",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        store = space.store
+
+        selected_time_formatted = f"{time_int}:00"
+
+        # StoreMenuSpace에서 해당 space_id에 연결된 menu들
+        menu_spaces = StoreMenuSpace.objects.filter(space=space)
+        menu_ids = menu_spaces.values_list("menu_id", flat=True).distinct()
+
+        if not menu_ids:
+            return Response(
+                {
+                    "errorCode": "NO_MENU_AVAILABLE",
+                    "message": "해당 공간에 등록된 메뉴가 없습니다.",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        menus_data = []
+        today = datetime.now().date()
+
+        # 각 메뉴별로 해당 시간대에 할인율 높은 순으로 StoreItem 가져오기
+        # 여러 개 모두 반환
+        for menu_id in menu_ids:
+            menu = StoreMenu.objects.filter(pk=menu_id).first()
+            if not menu:
+                continue
+
+            # 할인율이 높은 순으로 모든 StoreItem 조회 (item_reservation_date = today, item_reservation_time = time_int)
+            store_items = StoreItem.objects.filter(
+                menu=menu,
+                space=space,
+                item_reservation_date=today,
+                item_reservation_time=time_int,
+            ).order_by("-max_discount_rate")
+
+            if not store_items.exists():
+                # 재고 없거나 예약 불가능한 경우라도 메뉴는 노출, 빈 상태로 is_available False 처리할 수 있음
+                menus_data.append(
+                    {
+                        "menu_id": menu.menu_id,
+                        "menu_name": menu.menu_name,
+                        "menu_image_url": menu.menu_image_url,
+                        "menu_price": menu.menu_price,
+                        "item_id": None,
+                        "discount_rate": 0,
+                        "discounted_price": menu.menu_price,
+                        "is_available": False,
+                    }
+                )
+                continue
+
+            # 메뉴별 StoreItem 여러개 모두 처리
+            for item in store_items:
+                discounted_price = (
+                    int(menu.menu_price * (1 - item.max_discount_rate))
+                    if item.max_discount_rate
+                    else menu.menu_price
+                )
+                menus_data.append(
+                    {
+                        "menu_id": menu.menu_id,
+                        "menu_name": menu.menu_name,
+                        "menu_image_url": menu.menu_image_url,
+                        "menu_price": menu.menu_price,
+                        "item_id": item.item_id,
+                        "discount_rate": (
+                            int(item.max_discount_rate * 100)
+                            if item.max_discount_rate
+                            else 0
+                        ),
+                        "discounted_price": discounted_price,
+                        "is_available": item.item_stock > 0,
+                    }
+                )
+
+        response_data = {
+            "store_name": store.store_name,
+            "space_name": space.space_name,
+            "space_description": space.space_description,
+            "selected_time": selected_time_formatted,
+            "is_liked": False,  # 인증 없으므로 항상 False. <- 인증 추가 시 수정 필요
+            "space_id": space.space_id,
+            "space_image_url": space.space_image_url,
+            "menus": menus_data,
+        }
+
+        return Response(response_data)
