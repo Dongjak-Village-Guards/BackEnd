@@ -14,6 +14,10 @@ from pathlib import Path
 import os, json
 from django.core.exceptions import ImproperlyConfigured
 
+import pymysql
+
+from datetime import timedelta
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,25 +26,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-secret_file = os.path.join(BASE_DIR, 'secrets.json') 
+secret_file = os.path.join(BASE_DIR, "secrets.json")
 
 with open(secret_file) as f:
     secrets = json.loads(f.read())
 
-def get_secret(setting, secrets=secrets): 
-# secret 변수를 가져오거나 그렇지 못 하면 예외를 반환
+
+def get_secret(setting, secrets=secrets):
+    # secret 변수를 가져오거나 그렇지 못 하면 예외를 반환
     try:
         return secrets[setting]
     except KeyError:
         error_msg = "Set the {} environment variable".format(setting)
         raise ImproperlyConfigured(error_msg)
 
+
 SECRET_KEY = get_secret("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -48,81 +54,110 @@ ALLOWED_HOSTS = []
 # Application definition
 
 DJANGO_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
 ]
 
 PROJECT_APPS = [
-
+    "accounts",
+    "stores",
+    "reservations",
+    "records",
 ]
 
 THIRD_PARTY_APPS = [
-
+    "corsheaders",
+    "storages",  # S3
+    "drf_yasg",  # Swagger
+    "rest_framework",  # DRF 관련 django rest framework
+    "rest_framework_simplejwt",  # jwt
 ]
 
 
 INSTALLED_APPS = DJANGO_APPS + PROJECT_APPS + THIRD_PARTY_APPS
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'config.urls'
+ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'config.wsgi.application'
+WSGI_APPLICATION = "config.wsgi.application"
 
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+ENVIRONMENT = os.getenv("DJANGO_ENV", "development")  # 기본값은 development
+
+DB_DEV_PW = get_secret("DB_DEV_PW")  # 개발용 DB 비밀번호
+DB_DEP_PW = get_secret("DB_DEP_PW")  # 배포용 DB 비밀번호
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    # 'local': {
+    #     'ENGINE': 'django.db.backends.sqlite3',
+    #     'NAME': BASE_DIR / 'db.sqlite3',
+    # },
+    "development": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "buynow_dev",  # 개발용 DB 이름
+        "USER": "likelion13th",
+        "PASSWORD": DB_DEV_PW,
+        "HOST": "127.0.0.1",
+        "PORT": "3307",
+    },
+    "deployment": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "buynow_dep",  # 배포용 DB 이름
+        "USER": "likelion13th",
+        "PASSWORD": DB_DEP_PW,
+        "HOST": "127.0.0.1",
+        "PORT": "3307",
+    },
 }
-
+# 환경에 맞는 DB 설정을 'default'로 지정
+DATABASES["default"] = DATABASES.get(ENVIRONMENT)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -130,9 +165,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -142,9 +177,61 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://dongjak.netlify.app",
+]
+pymysql.install_as_MySQLdb()
+
+###AWS###
+AWS_ACCESS_KEY_ID = get_secret(
+    "AWS_ACCESS_KEY_ID"
+)  # .csv 파일에 있는 내용을 입력 Access key ID. IAM 계정 관련
+AWS_SECRET_ACCESS_KEY = get_secret(
+    "AWS_SECRET_ACCESS_KEY"
+)  # .csv 파일에 있는 내용을 입력 Secret access key. IAM 계정 관련
+AWS_REGION = "ap-northeast-2"
+
+###S3###
+AWS_STORAGE_BUCKET_NAME = "likelion13thbucket"
+AWS_S3_CUSTOM_DOMAIN = "%s.s3.%s.amazonaws.com" % (AWS_STORAGE_BUCKET_NAME, AWS_REGION)
+AWS_S3_OBJECT_PARAMETERS = {
+    "CacheControl": "max-age=86400",
+}
+
+###REST_FRAMEWORK###
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        #'config.authentication.FirebaseIDTokenAuthentication',
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",  # 필요시
+    ],
+    # 'DEFAULT_PERMISSION_CLASSES': [
+    #     'rest_framework.permissions.IsAuthenticated',
+    # ],
+}
+
+REST_USE_JWT = True
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        hours=120
+    ),  # 유효기간 120시간 (개발중이라 길게함. 나중에 꼭 줄여놔야해!!)
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "AUTH_HEADER_TYPES": ("Bearer", "JWT"),
+    "TOKEN_USER_CLASS": "accounts.User",
+}
+AUTH_USER_MODEL = "accounts.User"

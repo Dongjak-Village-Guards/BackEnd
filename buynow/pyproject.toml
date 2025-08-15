@@ -8,7 +8,17 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "django (>=5.2.5,<6.0.0)"
+    "django (>=5.2.5,<6.0.0)",
+    "django-cors-headers (>=4.7.0,<5.0.0)",
+    "pymysql (>=1.1.1,<2.0.0)",
+    "sshtunnel (>=0.4.0,<0.5.0)",
+    "pillow (>=11.3.0,<12.0.0)",
+    "django-storages (>=1.14.6,<2.0.0)",
+    "drf-yasg (>=1.21.10,<2.0.0)",
+    "djangorestframework (>=3.16.1,<4.0.0)",
+    "requests (>=2.32.4,<3.0.0)",
+    "firebase-admin (>=7.1.0,<8.0.0)",
+    "djangorestframework-simplejwt (>=5.5.1,<6.0.0)"
 ]
 
 [tool.poetry]
