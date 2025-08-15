@@ -119,10 +119,10 @@ DB_DEV_PW = get_secret("DB_DEV_PW")  # 개발용 DB 비밀번호
 DB_DEP_PW = get_secret("DB_DEP_PW")  # 배포용 DB 비밀번호
 
 DATABASES = {
-    # 'local': {
-    #     'ENGINE': 'django.db.backends.sqlite3',
-    #     'NAME': BASE_DIR / 'db.sqlite3',
-    # },
+    #'local': {
+    #    'ENGINE': 'django.db.backends.sqlite3',
+    #    'NAME': BASE_DIR / 'db.sqlite3',
+    #},
     "development": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": "buynow_dev",  # 개발용 DB 이름

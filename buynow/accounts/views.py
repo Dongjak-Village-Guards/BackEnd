@@ -10,25 +10,11 @@ from rest_framework.generics import get_object_or_404
 from .models import User
 from .serializers import GoogleLoginSerializer, AdminLoginSerializer, UserSerializer
 from config.authentication import FirebaseIDTokenAuthentication
+from .permissions import *
 
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 
-# ----------------------------
-# 권한 클래스
-# ----------------------------
-class IsAdminRole(BasePermission):
-    def has_permission(self, request, view):
-        return request.user and request.user.user_role == 'admin'
-
-class IsUserRole(BasePermission):
-    allowed_roles = ['admin', 'customer']
-    def has_permission(self, request, view):
-        return request.user and request.user.user_role in self.allowed_roles
-
-class IsOwnerRole(BasePermission):
-    def has_permission(self, request, view):
-        return request.user and request.user.user_role == 'owner'
 
 # ----------------------------
 # 로그인 & 토큰 관련 view
