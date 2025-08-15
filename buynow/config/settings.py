@@ -122,7 +122,7 @@ DATABASES = {
     #'local': {
     #    'ENGINE': 'django.db.backends.sqlite3',
     #    'NAME': BASE_DIR / 'db.sqlite3',
-    #},
+    # },
     "development": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": "buynow_dev",  # 개발용 DB 이름
@@ -235,3 +235,6 @@ SIMPLE_JWT = {
     "TOKEN_USER_CLASS": "accounts.User",
 }
 AUTH_USER_MODEL = "accounts.User"
+
+SWAGGER_SETTINGS = {"USE_SESSION_AUTH": False}
+# Swagger 설정
