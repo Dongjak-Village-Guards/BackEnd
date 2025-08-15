@@ -38,7 +38,7 @@ class GoogleLoginSerializer(serializers.Serializer):
             defaults={
                 'user_image_url': image_url,
                 'user_role': role,
-                'user_password': make_password(""),
+                'password': make_password(""),
             }
         )
 
@@ -52,7 +52,7 @@ class GoogleLoginSerializer(serializers.Serializer):
 class AdminLoginSerializer(serializers.Serializer):
     admin_email = serializers.CharField()
     admin_password = serializers.CharField(write_only=True)
-    user_password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True)
     user_role = serializers.CharField()
 
     def validate(self, attrs):
@@ -63,10 +63,10 @@ class AdminLoginSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
-        user_password = make_password(validated_data['user_password'])
+        password = make_password(validated_data['password'])
         user, created = User.objects.get_or_create(
             user_email=validated_data['admin_email'],
-            defaults={'user_role': 'admin', 'user_password': user_password, 'is_staff': True, 'is_superuser': True}
+            defaults={'user_role': 'admin', 'password': password, 'is_staff': True, 'is_superuser': True}
         )
         access_token, refresh_token = self._generate_tokens(user)
         return {"user": user, "created": created, "access_token": access_token, "refresh_token": refresh_token}
