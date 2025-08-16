@@ -160,6 +160,7 @@ class StoreListView(APIView):
         user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
+
         # 필수 파라미터 확인할 것!
         try:
             time_filter = int(request.GET.get("time"))
@@ -364,7 +365,6 @@ class NumOfSpacesView(APIView):
 
 
 class StoreSpacesDetailView(APIView):
-    authentication_classes = []
     permission_classes = [IsUserRole]  # 인증 필요
 
     @swagger_auto_schema(
@@ -733,7 +733,6 @@ class StoreSpaceDetailView(APIView):
 
 class StoreSingleSpaceDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
-    authentication_classes = []
 
     @swagger_auto_schema(...)
     def get(self, request, store_id):
