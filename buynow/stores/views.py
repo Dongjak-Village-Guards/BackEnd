@@ -157,6 +157,9 @@ class StoreListView(APIView):
         },
     )
     def get(self, request):
+        user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
         # 필수 파라미터 확인할 것!
         try:
             time_filter = int(request.GET.get("time"))
@@ -168,11 +171,6 @@ class StoreListView(APIView):
         category = request.GET.get("store_category")
 
         # JWT 인증 및 예외처리 추가
-        user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
-        if not user or not user.is_authenticated:
-            return Response(
-                {"error": "인증이 필요합니다."}, status=401
-            )  # 미인증시 401 반환
         user_address = getattr(user, "user_address", None)
         if not user_address:
             return Response(
@@ -429,7 +427,9 @@ class StoreSpacesDetailView(APIView):
         },
     )
     def get(self, request, store_id):
-        # --- 필수 쿼리 파라미터 확인 ---
+        if not request.user or not request.user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+        # 필수 쿼리 파라미터 확인
         try:
             time_filter = int(request.GET.get("time"))
         except (TypeError, ValueError):
@@ -441,7 +441,7 @@ class StoreSpacesDetailView(APIView):
         if not 0 <= time_filter <= 36:
             return Response({"error": "`time`값은 0과 36 사이여야 합니다."}, status=400)
 
-        # --- Store 조회 ---
+        # Store 조회
         try:
             store = Store.objects.get(pk=store_id)
         except Store.DoesNotExist:
@@ -460,7 +460,7 @@ class StoreSpacesDetailView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        # --- Store 기본 정보 ---
+        # Store 기본 정보
         store_data = {
             "store_name": store.store_name,
             "store_category": store.store_category,
@@ -473,7 +473,7 @@ class StoreSpacesDetailView(APIView):
             "spaces": [],
         }
 
-        # --- Space 목록 생성 ---
+        # Space 목록 생성
         spaces = StoreSpace.objects.filter(store=store)
 
         for space in spaces:
@@ -580,6 +580,8 @@ class StoreSpaceDetailView(APIView):
         },
     )
     def get(self, request, space_id):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
         # time 쿼리 파라미터 확인 및 검증
         time_param = request.GET.get("time")
         try:
@@ -735,6 +737,8 @@ class StoreSingleSpaceDetailView(APIView):
 
     @swagger_auto_schema(...)
     def get(self, request, store_id):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
         try:
             time_filter = int(request.GET.get("time"))
         except (TypeError, ValueError):
