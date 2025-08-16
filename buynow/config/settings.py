@@ -122,7 +122,7 @@ DATABASES = {
     #'local': {
     #    'ENGINE': 'django.db.backends.sqlite3',
     #    'NAME': BASE_DIR / 'db.sqlite3',
-    #},
+    # },
     "development": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": "buynow_dev",  # 개발용 DB 이름
@@ -165,9 +165,11 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "ko-kr"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Seoul"
+USE_TZ = False  # (기존 USE_TZ = True일 수도 있음)
+
 
 USE_I18N = True
 
@@ -235,3 +237,6 @@ SIMPLE_JWT = {
     "TOKEN_USER_CLASS": "accounts.User",
 }
 AUTH_USER_MODEL = "accounts.User"
+
+SWAGGER_SETTINGS = {"USE_SESSION_AUTH": False}
+# Swagger 설정
