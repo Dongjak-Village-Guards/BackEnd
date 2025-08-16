@@ -171,21 +171,6 @@ class StoreListView(APIView):
         if not 0 <= time_filter <= 36:
             return Response({"error": "time은 0~36 사이여야 합니다."}, status=400)
 
-        category = request.GET.get("store_category", None)
-
-        qs = StoreItem.objects.filter(
-            item_reservation_date=target_date,
-            item_reservation_time=target_time,
-            item_stock__gt=0,
-            store__is_active=True,
-        )
-
-        if category is not None:
-            # 공백 제거 후 빈문자열이면 필터링하지 않음
-            normalized_category = category.strip()
-            if normalized_category != "":
-                qs = qs.filter(store__store_category__iexact=normalized_category)
-
         # JWT 인증 및 예외처리 추가
         user_address = getattr(user, "user_address", None)
         if not user_address:
@@ -193,6 +178,7 @@ class StoreListView(APIView):
                 {"error": "사용자 주소 정보가 필요합니다."}, status=400
             )  # 주소 필요시 400 반환
 
+        category = request.GET.get("store_category", None)
         today = datetime.now().date()
         target_date = today
         target_time = time_filter
@@ -200,13 +186,19 @@ class StoreListView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        # 예약 가능한 store item 쿼리
-        qs = StoreItem.objects.filter(
-            item_reservation_date=target_date,
-            item_reservation_time=target_time,
-            item_stock__gt=0,
-            store__is_active=True,
-        )
+        filters = {
+            "item_reservation_date": target_date,
+            "item_reservation_time": target_time,
+            "item_stock__gt": 0,
+            "store__is_active": True,
+        }
+
+        if category is not None:
+            normalized_category = category.strip().strip('"')
+            if normalized_category != "":
+                filters["store__store_category__iexact"] = normalized_category
+
+        qs = StoreItem.objects.filter(**filters)
 
         # 가게별 최대 할인율 계산
         max_discounts = qs.values("store_id").annotate(
