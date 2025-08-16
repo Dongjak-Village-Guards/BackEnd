@@ -47,7 +47,7 @@ def get_coordinates(address):
     
     kakao_api_url = "https://dapi.kakao.com/v2/local/search/address.json"
     headers = {
-			"Authorization" : f"KakaoAK {settings.KAKAO_REST_API_KEY}"
+			"Authorization" : f"KakaoAK {KAKAO_REST_API_KEY}"
 	}
     params = {"query" : address}
 
