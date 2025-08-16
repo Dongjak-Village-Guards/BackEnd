@@ -1,5 +1,6 @@
 from django.shortcuts import render
 
+from buynow.accounts.permissions import IsUserRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -101,10 +102,7 @@ def get_distance_and_coords_from_two_addresses(addr1: str, addr2: str):
 
 
 class StoreListView(APIView):
-    # permission_classes = [AllowAny]  # JWT 인증 추가
-    permission_classes = [
-        IsAuthenticated
-    ]  # JWT 인증(RF SimpleJWT 등 사용 시 윗줄을 주석처리, 이거 활성화)
+    permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
 
     @swagger_auto_schema(
         operation_summary="가게 목록 조회",
@@ -315,9 +313,8 @@ class StoreListView(APIView):
 
 
 class NumOfSpacesView(APIView):
-    # 인증 뺐음...
     authentication_classes = []
-    permission_classes = []
+    permission_classes = [AllowAny]  # 인증 필요 없음
 
     @swagger_auto_schema(
         operation_summary="특정 Store의 Space 목록 조회",
@@ -370,7 +367,7 @@ class NumOfSpacesView(APIView):
 
 class StoreSpacesDetailView(APIView):
     authentication_classes = []
-    permission_classes = [IsAuthenticated]  # 인증 필요
+    permission_classes = [IsUserRole]  # 인증 필요
 
     @swagger_auto_schema(
         operation_summary="특정 Store의 Space 상세 목록 조회",
@@ -513,8 +510,7 @@ class StoreSpacesDetailView(APIView):
 
 
 class StoreSpaceDetailView(APIView):
-    authentication_classes = []
-    permission_classes = [IsAuthenticated]  # 인증 필요
+    permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
 
     @swagger_auto_schema(
         operation_summary="특정 Space의 상세 정보 및 메뉴 정보 조회",
@@ -734,7 +730,7 @@ class StoreSpaceDetailView(APIView):
 
 
 class StoreSingleSpaceDetailView(APIView):
-    permission_classes = [IsAuthenticated]  # 인증 필수
+    permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
     authentication_classes = []
 
     @swagger_auto_schema(...)
