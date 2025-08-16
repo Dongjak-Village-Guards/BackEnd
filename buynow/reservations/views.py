@@ -8,7 +8,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db.models import Max, Q
 from django.utils import timezone
-import datetime
+import datetime,time
 from django.db import transaction
 
 # 모델
@@ -60,7 +60,7 @@ class ReserveList(APIView):
                     }
                 )
             ),
-            400: "item_id 누락 or 예약 불가",
+            400: "item_id 누락 or 예약 불가 or 시간 지난 item or 가격,할인율 누락",
             401: "인증이 필요합니다.",
             404: "존재하지 않는 Item or StoreSlot"
         }
@@ -87,6 +87,14 @@ class ReserveList(APIView):
                     StoreItem.objects.select_for_update(),
                     item_id=item_id
                 )
+
+                # 현재 시간보다 이전 예약이면 예약 불가
+                item_datetime = datetime.combine(
+                    item.item_reservation_date,
+                    time(hour=item.item_reservation_time)
+                )
+                if item_datetime <= datetime.now():
+                    return Response({"error": "이전 시간의 예약은 불가능합니다."}, status=400)
 
                 # 재고 확인
                 if item.item_stock <= 0:
@@ -218,7 +226,7 @@ class ReserveMe(APIView):
         current_hour = now.hour
 
         # select_related로 N+1 문제 방지
-        reservations = Reservation.objects.filter(user_id=user).select_related(
+        reservations = Reservation.objects.filter(user=user).select_related(
             'reservation_slot', 'store_item', 'store_item__store',
             'store_item__menu', 'store_item__space'
         ).filter(
@@ -375,7 +383,7 @@ class LikeDetail(APIView):
         # 좋아요 삭제 권한 검사
         if user.user_role == "admin":
             pass
-        elif user != like.user_id : # 이것도 like.user_id 라고 하면 이게 FK니까 user 객체가 온대.
+        elif user != like.user : # 이것도 like.user_id 라고 하면 이게 FK니까 user 객체가 온대.
             return Response({"error" : "권한이 없습니다."}, status = 403)
     
         # 좋아요 삭제
