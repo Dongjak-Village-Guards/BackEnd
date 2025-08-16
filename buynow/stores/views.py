@@ -2,7 +2,7 @@ from django.shortcuts import render
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q, Max
 from datetime import datetime, timedelta
 import math
@@ -101,8 +101,10 @@ def get_distance_and_coords_from_two_addresses(addr1: str, addr2: str):
 
 
 class StoreListView(APIView):
-    permission_classes = [AllowAny]  # JWT 인증 추가
-    # permission_classes = [IsAuthenticatedOrReadOnly]  # JWT 인증(RF SimpleJWT 등 사용 시 윗줄을 주석처리, 이거 활성화)
+    # permission_classes = [AllowAny]  # JWT 인증 추가
+    permission_classes = [
+        IsAuthenticated
+    ]  # JWT 인증(RF SimpleJWT 등 사용 시 윗줄을 주석처리, 이거 활성화)
 
     @swagger_auto_schema(
         operation_summary="가게 목록 조회",
@@ -167,17 +169,27 @@ class StoreListView(APIView):
 
         category = request.GET.get("store_category")
 
-        # 사용자 객체에서 도로명주소 속성으로 가정 (예: user_address)
-        user = (
-            request.user
-            if getattr(request, "user", None) and request.user.is_authenticated
-            else None
-        )
-        user_address = None
-        if user:
-            user_address = getattr(
-                user, "user_address", None
-            )  # 실제 필드명에 맞게 수정
+        # JWT 인증 및 예외처리 추가
+        user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
+        if not user or not user.is_authenticated:
+            return Response(
+                {"error": "인증이 필요합니다."}, status=401
+            )  # 미인증시 401 반환
+        user_address = getattr(user, "user_address", None)
+        if not user_address:
+            return Response(
+                {"error": "사용자 주소 정보가 필요합니다."}, status=400
+            )  # 주소 필요시 400 반환
+
+        # user = (
+        #     request.user
+        #     if getattr(request, "user", None) and request.user.is_authenticated
+        #     else None
+        # )
+        # user_address = None
+        # if user:
+        #     user_address = getattr(
+        #         user, "user_address", None
 
         today = datetime.now().date()
         target_date = today
@@ -262,12 +274,19 @@ class StoreListView(APIView):
 
             on_foot = distance // 70 if distance else 0  # 대략 70m/분으로 가정
 
+            # is_liked, liked_id = False, 0
+            # if user:
+            #     like = UserLike.objects.filter(user=user, store=store).first()
+            #     if like:
+            #         is_liked = True
+            #         liked_id = like.like_id
+
+            # 찜 정보 always 페어 반환
             is_liked, liked_id = False, 0
-            if user:
-                like = UserLike.objects.filter(user=user, store=store).first()
-                if like:
-                    is_liked = True
-                    liked_id = like.like_id
+            like = UserLike.objects.filter(user=user, store=store).first()
+            if like:
+                is_liked = True
+                liked_id = like.like_id
 
             menu = item.menu
             results.append(
@@ -351,20 +370,20 @@ class NumOfSpacesView(APIView):
 
 class StoreSpacesDetailView(APIView):
     authentication_classes = []
-    permission_classes = []
+    permission_classes = [IsAuthenticated]  # 인증 필요
 
     @swagger_auto_schema(
         operation_summary="특정 Store의 Space 상세 목록 조회",
         operation_description="""
         특정 store_id에 해당하는 가게 기본 정보와 하위 Space 목록을 반환합니다.
-        - 쿼리 파라미터 `time`을 반드시 전달해야 합니다 (0~23 시각, int).
+        - 쿼리 파라미터 `time`을 반드시 전달해야 합니다 (0~36 시각, int).
         - 각 Space 항목에는 최대 할인율과 해당 시간대 예약 가능 여부를 포함합니다.
         """,
         manual_parameters=[
             openapi.Parameter(
                 "time",
                 openapi.IN_QUERY,
-                description="조회할 시간대 (0~23)",
+                description="조회할 시간대 (0~36)",
                 type=openapi.TYPE_INTEGER,
                 required=True,
             ),
@@ -422,8 +441,8 @@ class StoreSpacesDetailView(APIView):
                 status=400,
             )
 
-        if not 0 <= time_filter <= 23:
-            return Response({"error": "`time`값은 0과 23 사이여야 합니다."}, status=400)
+        if not 0 <= time_filter <= 36:
+            return Response({"error": "`time`값은 0과 36 사이여야 합니다."}, status=400)
 
         # --- Store 조회 ---
         try:
@@ -438,6 +457,11 @@ class StoreSpacesDetailView(APIView):
             )
 
         today = datetime.now().date()
+        target_date = today
+        target_time = time_filter  # 날짜/시간 보정용 변수들
+        if time_filter >= 24:  # 24이상은 다음날로 계산
+            target_date = today + timedelta(days=1)
+            target_time = time_filter - 24
 
         # --- Store 기본 정보 ---
         store_data = {
@@ -460,8 +484,8 @@ class StoreSpacesDetailView(APIView):
             max_discount = StoreItem.objects.filter(
                 store=store,
                 space=space,
-                item_reservation_date=today,
-                item_reservation_time=time_filter,
+                item_reservation_date=target_date,
+                item_reservation_time=target_time,
             ).aggregate(Max("max_discount_rate"))["max_discount_rate__max"]
 
             max_discount_percent = int(max_discount * 100) if max_discount else 0
@@ -470,8 +494,8 @@ class StoreSpacesDetailView(APIView):
             is_possible = StoreItem.objects.filter(
                 store=store,
                 space=space,
-                item_reservation_date=today,
-                item_reservation_time=time_filter,
+                item_reservation_date=target_date,
+                item_reservation_time=target_time,
                 item_stock__gt=0,
             ).exists()
 
@@ -490,7 +514,7 @@ class StoreSpacesDetailView(APIView):
 
 class StoreSpaceDetailView(APIView):
     authentication_classes = []
-    permission_classes = []
+    permission_classes = [IsAuthenticated]  # 인증 필요
 
     @swagger_auto_schema(
         operation_summary="특정 Space의 상세 정보 및 메뉴 정보 조회",
@@ -498,7 +522,7 @@ class StoreSpaceDetailView(APIView):
             openapi.Parameter(
                 "time",
                 openapi.IN_QUERY,
-                description="조회할 예약 시간 (0~23)",
+                description="조회할 예약 시간 (0~36)",
                 type=openapi.TYPE_INTEGER,
                 required=True,
             )
@@ -569,8 +593,8 @@ class StoreSpaceDetailView(APIView):
                 {"error": "`time` query parameter는 필수이며 정수여야 합니다."},
                 status=400,
             )
-        if not 0 <= time_int <= 23:
-            return Response({"error": "`time`은 0과 23 사이여야 합니다."}, status=400)
+        if not 0 <= time_int <= 36:
+            return Response({"error": "`time`은 0과 36 사이여야 합니다."}, status=400)
 
         try:
             space = StoreSpace.objects.get(pk=space_id)
@@ -585,7 +609,13 @@ class StoreSpaceDetailView(APIView):
 
         store = space.store
 
-        selected_time_formatted = f"{time_int}:00"
+        today = datetime.now().date()
+        target_date = today
+        target_time = time_int
+        if time_int >= 24:
+            target_date = today + timedelta(days=1)
+            target_time = time_int - 24
+        selected_time_formatted = f"{target_time}:00"
 
         # StoreMenuSpace에서 해당 space_id에 연결된 menu들
         menu_spaces = StoreMenuSpace.objects.filter(space=space)
@@ -614,8 +644,8 @@ class StoreSpaceDetailView(APIView):
             store_items = StoreItem.objects.filter(
                 menu=menu,
                 space=space,
-                item_reservation_date=today,
-                item_reservation_time=time_int,
+                item_reservation_date=target_date,
+                item_reservation_time=target_time,
             ).order_by("-max_discount_rate")
 
             if not store_items.exists():
@@ -658,15 +688,165 @@ class StoreSpaceDetailView(APIView):
                     }
                 )
 
+        # 찜 - 사용자 인증 방식 적용
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response(
+                {"error": "인증이 필요합니다."}, status=401
+            )  # 인증 필요시 401 반환
+
+        # 찜 정보 페어 반환
+        is_liked = False
+        liked_id = 0
+        like = UserLike.objects.filter(user=user, store=store).first()
+        if like:
+            is_liked = True
+            liked_id = like.like_id
+
+        # 찜
+        # user = (
+        #     request.user
+        #     if getattr(request, "user", None) and request.user.is_authenticated
+        #     else None
+        # )
+        # is_liked = False
+        # liked_id = 0
+        # if user:
+        #     # "찜" 정보 조회: user와 해당 store에 대해 찜이 있으면 True, liked_id 반영
+        #     like = UserLike.objects.filter(user=user, store=store).first()
+        #     if like:
+        #         is_liked = True
+        #         liked_id = like.like_id
+
         response_data = {
             "store_name": store.store_name,
             "space_name": space.space_name,
             "space_description": space.space_description,
             "selected_time": selected_time_formatted,
-            "is_liked": False,  # 인증 없으므로 항상 False. <- 인증 추가 시 수정 필요
+            "is_liked": is_liked,
+            "liked_id": liked_id,
             "space_id": space.space_id,
             "space_image_url": space.space_image_url,
             "menus": menus_data,
         }
 
         return Response(response_data)
+
+
+class StoreSingleSpaceDetailView(APIView):
+    permission_classes = [IsAuthenticated]  # 인증 필수
+    authentication_classes = []
+
+    @swagger_auto_schema(...)
+    def get(self, request, store_id):
+        try:
+            time_filter = int(request.GET.get("time"))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "`time` query parameter는 필수이며 정수여야 합니다."},
+                status=400,
+            )
+        if not 0 <= time_filter <= 36:
+            return Response({"error": "`time`값은 0과 36 사이여야 합니다."}, status=400)
+
+        try:
+            store = Store.objects.get(pk=store_id)
+        except Store.DoesNotExist:
+            return Response(
+                {
+                    "errorCode": "STORE_NOT_FOUND",
+                    "message": "해당 store_id의 매장이 존재하지 않습니다.",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        today = datetime.now().date()
+        target_date = today
+        target_time = time_filter
+        if time_filter >= 24:
+            target_date = today + timedelta(days=1)
+            target_time = time_filter - 24
+        selected_time_formatted = f"{target_time}:00"
+
+        space = StoreSpace.objects.filter(store=store).first()
+        if not space:
+            return Response(
+                {"error": "해당 store에 연결된 space가 없습니다."}, status=404
+            )
+
+        # 인증된 사용자만 접근이기 때문에 바로 request.user 사용
+        user = request.user
+
+        is_liked = False
+        like_id = 0
+        like = UserLike.objects.filter(user=user, store=store).first()
+        if like:
+            is_liked = True
+            like_id = like.like_id
+
+        menu_spaces = StoreMenuSpace.objects.filter(space=space)
+        menu_ids = menu_spaces.values_list("menu_id", flat=True).distinct()
+        menus_data = []
+        for menu_id in menu_ids:
+            menu = StoreMenu.objects.filter(pk=menu_id).first()
+            if not menu:
+                continue
+            item = (
+                StoreItem.objects.filter(
+                    menu=menu,
+                    space=space,
+                    item_reservation_date=target_date,
+                    item_reservation_time=target_time,
+                )
+                .order_by("-max_discount_rate")
+                .first()
+            )
+            if item:
+                discounted_price = (
+                    int(menu.menu_price * (1 - item.max_discount_rate))
+                    if item.max_discount_rate
+                    else menu.menu_price
+                )
+                menus_data.append(
+                    {
+                        "menu_id": menu.menu_id,
+                        "menu_name": menu.menu_name,
+                        "menu_image_url": menu.menu_image_url,
+                        "item_id": item.item_id,
+                        "discount_rate": (
+                            int(item.max_discount_rate * 100)
+                            if item.max_discount_rate
+                            else 0
+                        ),
+                        "discounted_price": discounted_price,
+                        "menu_price": menu.menu_price,
+                        "is_available": item.item_stock > 0,
+                    }
+                )
+            else:
+                menus_data.append(
+                    {
+                        "menu_id": menu.menu_id,
+                        "menu_name": menu.menu_name,
+                        "menu_image_url": menu.menu_image_url,
+                        "item_id": None,
+                        "discount_rate": 0,
+                        "discounted_price": menu.menu_price,
+                        "menu_price": menu.menu_price,
+                        "is_available": False,
+                    }
+                )
+
+        store_data = {
+            "store_name": store.store_name,
+            "store_address": store.store_address,
+            "store_image_url": store.store_image_url,
+            "store_description": store.store_description,
+            "selected_time": selected_time_formatted,
+            "distance": request.GET.get("distance", None),
+            "on_foot": request.GET.get("on_foot", None),
+            "is_liked": is_liked,
+            "like_id": like_id,
+            "menus": menus_data,
+        }
+        return Response(store_data, status=200)
