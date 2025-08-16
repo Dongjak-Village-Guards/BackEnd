@@ -188,3 +188,5 @@ class UserMe(APIView):
         serializer = UserSerializer(user)
         return Response(serializer.data)
     
+
+    
