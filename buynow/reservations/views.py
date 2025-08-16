@@ -154,12 +154,11 @@ class ReserveDetail(APIView):
         operation_description = "해당 id의 예약을 취소합니다.",
         responses={204: "삭제 완료", 400: "reservation_id 가 필요합니다.", 401: "인증이 필요합니다.", 403: "권한이 없습니다.", 404: "존재하지 않는 reservation_id"}
     )
-    def delete(self, request):
+    def delete(self, request,reservation_id):
         user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
         
-        reservation_id = request.data.get('reservation_id')
         if not reservation_id:
             return Response({"error": "reservation_id 가 필요합니다."}, status = 400)
 
@@ -213,10 +212,21 @@ class ReserveMe(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
+        # 시간 관련
+        now = timezone.localtime()
+        today = now.date()
+        current_hour = now.hour
+
         # select_related로 N+1 문제 방지
         reservations = Reservation.objects.filter(user_id=user).select_related(
             'reservation_slot', 'store_item', 'store_item__store',
             'store_item__menu', 'store_item__space'
+        ).filter(
+            Q(reservation_slot__slot_reservation_date__gt=today) | 
+            Q(
+                reservation_slot__slot_reservation_date=today,
+                reservation_slot__slot_reservation_time__gte=current_hour
+            )
         ).order_by(
             'reservation_slot__slot_reservation_date', 
             'reservation_slot__slot_reservation_time'
