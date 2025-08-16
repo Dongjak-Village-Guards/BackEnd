@@ -1,4 +1,4 @@
-from config.kakaiapi import get_distance_walktime
+from config.kakaoapi import get_distance_walktime
 
 from django.shortcuts import render
 
