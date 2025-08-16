@@ -15,6 +15,7 @@ from .permissions import *
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+from config.kakaoapi import *
 
 # ----------------------------
 # 로그인 & 토큰 관련 view
@@ -217,4 +218,3 @@ class UserMe(APIView):
         return Response(serializer.data)
     
 
-    
