@@ -1,3 +1,5 @@
+from config.kakaiapi import get_distance_walktime
+
 from django.shortcuts import render
 
 from accounts.permissions import IsUserRole
@@ -22,83 +24,83 @@ from drf_yasg import openapi
 from datetime import datetime
 
 
-# 거리 계산 함수 (직선거리, haversine)
-def haversine_distance(lat1, lon1, lat2, lon2):
-    R = 6371000  # 지구 반지름(단위: m)
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    d_phi = math.radians(lat2 - lat1)
-    d_lambda = math.radians(lon2 - lon1)
-    a = (
-        math.sin(d_phi / 2) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
-    )
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return int(R * c)
+# # 거리 계산 함수 (직선거리, haversine)
+# def haversine_distance(lat1, lon1, lat2, lon2):
+#     R = 6371000  # 지구 반지름(단위: m)
+#     phi1, phi2 = math.radians(lat1), math.radians(lat2)
+#     d_phi = math.radians(lat2 - lat1)
+#     d_lambda = math.radians(lon2 - lon1)
+#     a = (
+#         math.sin(d_phi / 2) ** 2
+#         + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+#     )
+#     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+#     return int(R * c)
 
 
-# 도로명주소 2개 입력받아 각 위도, 경도, 도로 길이(미터) 리턴하는 외부 API 호출 함수 예시
-# 실제 API 스펙에 따라 리턴 값 형식과 호출 내용을 수정해야 함!
-def get_distance_and_coords_from_two_addresses(addr1: str, addr2: str):
-    """
-    예시: addr1, addr2 도로명주소를 받아서
-    {
-        'distance': 총 도로 길이 (m),
-        'addr1_lat': 위도,
-        'addr1_lng': 경도,
-        'addr2_lat': 위도,
-        'addr2_lng': 경도
-    }
-    형태의 dict 반환
-    실패 시 None 반환
-    """
-    # 실제 API 호출 부분 (주석처리했음... 맞춰서 수정하기)
-    """
-    API_URL = "https://example.externalapi.com/roadlength"
-    params = {"address1": addr1, "address2": addr2}
-    headers = {"Authorization": "Bearer YOUR_ACCESS_TOKEN"}
+# # 도로명주소 2개 입력받아 각 위도, 경도, 도로 길이(미터) 리턴하는 외부 API 호출 함수 예시
+# # 실제 API 스펙에 따라 리턴 값 형식과 호출 내용을 수정해야 함!
+# def get_distance_and_coords_from_two_addresses(addr1: str, addr2: str):
+#     """
+#     예시: addr1, addr2 도로명주소를 받아서
+#     {
+#         'distance': 총 도로 길이 (m),
+#         'addr1_lat': 위도,
+#         'addr1_lng': 경도,
+#         'addr2_lat': 위도,
+#         'addr2_lng': 경도
+#     }
+#     형태의 dict 반환
+#     실패 시 None 반환
+#     """
+#     # 실제 API 호출 부분 (주석처리했음... 맞춰서 수정하기)
+#     """
+#     API_URL = "https://example.externalapi.com/roadlength"
+#     params = {"address1": addr1, "address2": addr2}
+#     headers = {"Authorization": "Bearer YOUR_ACCESS_TOKEN"}
 
-    try:
-        resp = requests.get(API_URL, headers=headers, params=params, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        # data에서 원하는 키 읽어 리턴
-        return {
-            'distance': data.get('distance'),
-            'addr1_lat': data.get('addr1_lat'),
-            'addr1_lng': data.get('addr1_lng'),
-            'addr2_lat': data.get('addr2_lat'),
-            'addr2_lng': data.get('addr2_lng'),
-        }
-    except Exception as e:
-        # 로깅 등 처리 가능
-        return None
-    """
+#     try:
+#         resp = requests.get(API_URL, headers=headers, params=params, timeout=5)
+#         resp.raise_for_status()
+#         data = resp.json()
+#         # data에서 원하는 키 읽어 리턴
+#         return {
+#             'distance': data.get('distance'),
+#             'addr1_lat': data.get('addr1_lat'),
+#             'addr1_lng': data.get('addr1_lng'),
+#             'addr2_lat': data.get('addr2_lat'),
+#             'addr2_lng': data.get('addr2_lng'),
+#         }
+#     except Exception as e:
+#         # 로깅 등 처리 가능
+#         return None
+#     """
 
-    # [더미 데이터] - 테스트용: 매 호출마다 랜덤 출력되도록 해둠... 근데 이부분 작동 안 하는듯? 아래에 하드코딩 추가함
-    dummy_cases = [
-        {
-            "distance": 14000,
-            "addr1_lat": 37.5665,
-            "addr1_lng": 126.9780,  # 서울 시청
-            "addr2_lat": 37.4979,
-            "addr2_lng": 127.0276,  # 강남역
-        },
-        {
-            "distance": 8000,
-            "addr1_lat": 37.5714,
-            "addr1_lng": 126.9768,  # 광화문
-            "addr2_lat": 37.5133,
-            "addr2_lng": 127.1025,  # 잠실
-        },
-        {
-            "distance": 25000,
-            "addr1_lat": 37.5219,
-            "addr1_lng": 126.9246,  # 여의도
-            "addr2_lat": 37.4563,
-            "addr2_lng": 126.7052,  # 인천
-        },
-    ]
-    return random.choice(dummy_cases)
+# # [더미 데이터] - 테스트용: 매 호출마다 랜덤 출력되도록 해둠... 근데 이부분 작동 안 하는듯? 아래에 하드코딩 추가함
+# dummy_cases = [
+#     {
+#         "distance": 14000,
+#         "addr1_lat": 37.5665,
+#         "addr1_lng": 126.9780,  # 서울 시청
+#         "addr2_lat": 37.4979,
+#         "addr2_lng": 127.0276,  # 강남역
+#     },
+#     {
+#         "distance": 8000,
+#         "addr1_lat": 37.5714,
+#         "addr1_lng": 126.9768,  # 광화문
+#         "addr2_lat": 37.5133,
+#         "addr2_lng": 127.1025,  # 잠실
+#     },
+#     {
+#         "distance": 25000,
+#         "addr1_lat": 37.5219,
+#         "addr1_lng": 126.9246,  # 여의도
+#         "addr2_lat": 37.4563,
+#         "addr2_lng": 126.7052,  # 인천
+#     },
+# ]
+# return random.choice(dummy_cases)
 
 
 class StoreListView(APIView):
@@ -178,16 +180,6 @@ class StoreListView(APIView):
                 {"error": "사용자 주소 정보가 필요합니다."}, status=400
             )  # 주소 필요시 400 반환
 
-        # user = (
-        #     request.user
-        #     if getattr(request, "user", None) and request.user.is_authenticated
-        #     else None
-        # )
-        # user_address = None
-        # if user:
-        #     user_address = getattr(
-        #         user, "user_address", None
-
         today = datetime.now().date()
         target_date = today
         target_time = time_filter
@@ -235,9 +227,7 @@ class StoreListView(APIView):
         results = []
         for item in filtered_items:
             store = item.store
-            store_address = getattr(
-                store, "store_address", None
-            )  # 실제 필드명에 맞게 수정해야 함
+            store_address = getattr(store, "store_address", None)
 
             # 테스트용 더미 주소 자동 세팅
             if not user_address:
@@ -245,40 +235,48 @@ class StoreListView(APIView):
             if not store_address:
                 store_address = "서울특별시 강남구 강남대로 396"  # 테스트용 매장 주소 (강남역 주소임)
 
-            # 실제 API 호출 사용 시 주석 해제, 더미 데이터 부분은 주석 처리하여 전환 가능
+            # get_distance_walktime 함수로 실제 거리/도보 시간 계산
             if user_address and store_address:
-                # 실제 API 호출 (주석처리)
-                # api_result = get_distance_and_coords_from_two_addresses(user_address, store_address)
-
-                # 더미 데이터 사용
-                api_result = get_distance_and_coords_from_two_addresses(
-                    user_address, store_address
+                distance_km, walk_time_min = get_distance_walktime(
+                    store_address, user_address
                 )
-                if api_result:
-                    distance = api_result.get("distance", 0)
-                    user_lat = api_result.get("addr1_lat", 0)
-                    user_lng = api_result.get("addr1_lng", 0)
-                    store_lat = api_result.get("addr2_lat", 0)
-                    store_lng = api_result.get("addr2_lng", 0)
+                if distance_km is not None and walk_time_min is not None:
+                    distance = int(distance_km * 1000)  # m 단위로 변환
+                    on_foot = int(walk_time_min)
                 else:
                     distance = 0
-                    user_lat = user_lng = store_lat = store_lng = 0
-            elif user_address or store_address:  # 한쪽만 주소가 있을 때
-                distance = 0
-                user_lat = user_lng = store_lat = store_lng = 0
+                    on_foot = 0
             else:
                 distance = 0
+                on_foot = 0
 
-            on_foot = distance // 70 if distance else 0  # 대략 70m/분으로 가정
+            # # 실제 API 호출 사용 시 주석 해제, 더미 데이터 부분은 주석 처리하여 전환 가능
+            # if user_address and store_address:
+            #     # 실제 API 호출 (주석처리)
+            #     # api_result = get_distance_and_coords_from_two_addresses(user_address, store_address)
 
-            # is_liked, liked_id = False, 0
-            # if user:
-            #     like = UserLike.objects.filter(user=user, store=store).first()
-            #     if like:
-            #         is_liked = True
-            #         liked_id = like.like_id
+            #     # 더미 데이터 사용
+            #     api_result = get_distance_and_coords_from_two_addresses(
+            #         user_address, store_address
+            #     )
+            #     if api_result:
+            #         distance = api_result.get("distance", 0)
+            #         user_lat = api_result.get("addr1_lat", 0)
+            #         user_lng = api_result.get("addr1_lng", 0)
+            #         store_lat = api_result.get("addr2_lat", 0)
+            #         store_lng = api_result.get("addr2_lng", 0)
+            #     else:
+            #         distance = 0
+            #         user_lat = user_lng = store_lat = store_lng = 0
+            # elif user_address or store_address:  # 한쪽만 주소가 있을 때
+            #     distance = 0
+            #     user_lat = user_lng = store_lat = store_lng = 0
+            # else:
+            #     distance = 0
 
-            # 찜 정보 always 페어 반환
+            # on_foot = distance // 70 if distance else 0  # 대략 70m/분으로 가정
+
+            # 찜 정보
             is_liked, liked_id = False, 0
             like = UserLike.objects.filter(user=user, store=store).first()
             if like:
@@ -700,21 +698,6 @@ class StoreSpaceDetailView(APIView):
         if like:
             is_liked = True
             liked_id = like.like_id
-
-        # 찜
-        # user = (
-        #     request.user
-        #     if getattr(request, "user", None) and request.user.is_authenticated
-        #     else None
-        # )
-        # is_liked = False
-        # liked_id = 0
-        # if user:
-        #     # "찜" 정보 조회: user와 해당 store에 대해 찜이 있으면 True, liked_id 반영
-        #     like = UserLike.objects.filter(user=user, store=store).first()
-        #     if like:
-        #         is_liked = True
-        #         liked_id = like.like_id
 
         response_data = {
             "store_name": store.store_name,
