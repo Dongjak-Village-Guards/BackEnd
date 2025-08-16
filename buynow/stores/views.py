@@ -179,20 +179,20 @@ class StoreListView(APIView):
             if not store_address:
                 store_address = "서울특별시 강남구 강남대로 396"  # 테스트용 매장 주소 (강남역 주소임)
 
-            # get_distance_walktime 함수로 실제 거리/도보 시간 계산
-            if user_address and store_address:
-                distance_km, walk_time_min = get_distance_walktime(
-                    store_address, user_address
-                )
-                if distance_km is not None and walk_time_min is not None:
-                    distance = int(distance_km * 1000)  # m 단위로 변환
-                    on_foot = int(walk_time_min)
-                else:
-                    distance = 0
-                    on_foot = 0
-            else:
-                distance = 0
-                on_foot = 0
+            # # get_distance_walktime 함수로 실제 거리/도보 시간 계산
+            # if user_address and store_address:
+            #     distance_km, walk_time_min = get_distance_walktime(
+            #         store_address, user_address
+            #     )
+            #     if distance_km is not None and walk_time_min is not None:
+            #         distance = int(distance_km * 1000)  # m 단위로 변환
+            #         on_foot = int(walk_time_min)
+            #     else:
+            #         distance = 0
+            #         on_foot = 0
+            # else:
+            #     distance = 0
+            #     on_foot = 0
 
             # 찜 정보
             is_liked, liked_id = False, 0
@@ -206,8 +206,10 @@ class StoreListView(APIView):
                 {
                     "store_id": store.store_id,
                     "store_name": store.store_name,
-                    "distance": distance,
-                    "on_foot": on_foot,
+                    "distance": 0,  # 거리 계산 로직은 나중에 추가
+                    "on_foot": 0,  # 도보 시간 계산 로직은 나중에 추가
+                    # "distance": distance,
+                    # "on_foot": on_foot,
                     "store_image_url": store.store_image_url,
                     "menu_name": menu.menu_name,
                     "menu_id": menu.menu_id,
