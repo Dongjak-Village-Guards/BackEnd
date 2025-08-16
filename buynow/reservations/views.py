@@ -22,6 +22,12 @@ from .serializers import *
 # 권한
 from accounts.permissions import *
 
+# 예외 처리 구문 추가
+from django.db import IntegrityError, transaction
+from rest_framework import status
+import logging
+logger = logging.getLogger(__name__)
+
 # Create your views here.
 
 # ----------------------------
@@ -60,53 +66,84 @@ class ReserveList(APIView):
         }
     )
     def post(self, request):
-        user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
-        if not user or not user.is_authenticated:
-            return Response({"error": "인증이 필요합니다."}, status=401)
-        
-        item_id = request.data.get('item_id')
-        if not item_id:
-            return Response({"error": "item_id 가 필요합니다."}, status = 400)
+        try:
+            user = request.user
+            if not user or not user.is_authenticated:
+                return Response({"error": "인증이 필요합니다."}, status=401)
 
-        with transaction.atomic(): # 블록 안이 전부 성공하면 커밋, 실패하면 롤백.
-            item = get_object_or_404(StoreItem.objects.select_for_update(), item_id=item_id) # DB 레벨에서 해당 row를 잠금(lock) 걸어서 동시 예약 문제 방지
-        
-            # 이미 예약 했는지 확인 (재고가 0인 지 = 예약 불가)
-            if item.item_stock == 0:
-                return Response({"error": "예약이 불가능한 상품입니다."}, status=400)
+            item_id = request.data.get('item_id')
+            if not item_id:
+                return Response({"error": "item_id 가 필요합니다."}, status=400)
 
-            # StoreSlot 확인
-            store_slot = get_object_or_404(StoreSlot, space = item.space, slot_reservation_date = item.item_reservation_date, slot_reservation_time = item.item_reservation_time)
-            if store_slot.is_reserved == True:
-                return Response({"error" : "예약이 불가능한 상품입니다."}, status=400)
-        
-            # 재고 차감
-            item.item_stock -= 1
-            item.save()
+            # 타입 검사
+            try:
+                item_id = int(item_id)
+            except (TypeError, ValueError):
+                return Response({"error": "item_id는 정수여야 합니다."}, status=400)
 
-            # StoreSlot 상태 변경
-            store_slot.is_reserved = True
-            store_slot.save()
+            with transaction.atomic():
+                # 해당 아이템 락 걸어서 조회
+                item = get_object_or_404(
+                    StoreItem.objects.select_for_update(),
+                    item_id=item_id
+                )
 
-            # 할인 금액 계산하기
-            menu = item.menu
-            price_original = menu.menu_price
-            discounted_cost = price_original - price_original*item.current_discount_rate
-        
-            # 예약 생성
-            reservation = Reservation.objects.create(user=user, store_item=item, reservation_slot = store_slot, reservation_cost = discounted_cost)
-        
-		    # 할인 금액 계산 및 저장
-            user.user_discounted_cost_sum += reservation.reservation_cost
-            user.save()
-    
-        return Response({
-            "reservation_id": reservation.reservation_id,
-            "store_name": reservation.store_item.store.store_name,
-            "reservation_date": reservation.reservation_slot.slot_reservation_date,
-            "reservation_time": f"{reservation.reservation_slot.slot_reservation_time}:00"
-        }, status=201)
+                # 재고 확인
+                if item.item_stock <= 0:
+                    return Response({"error": "예약이 불가능한 상품입니다."}, status=400)
 
+                # 슬롯 확인
+                store_slot = get_object_or_404(
+                    StoreSlot,
+                    space=item.space,
+                    slot_reservation_date=item.item_reservation_date,
+                    slot_reservation_time=item.item_reservation_time
+                )
+                if store_slot.is_reserved:
+                    return Response({"error": "이미 예약된 슬롯입니다."}, status=400)
+
+                # 재고 차감
+                item.item_stock -= 1
+                item.save()
+
+                # 슬롯 예약 상태 변경
+                store_slot.is_reserved = True
+                store_slot.save()
+
+                # 할인 금액 계산
+                menu = item.menu
+                price_original = menu.menu_price
+                if price_original is None or item.current_discount_rate is None:
+                    return Response({"error": "가격 또는 할인율 정보가 없습니다."}, status=400)
+                discounted_cost = price_original - price_original * item.current_discount_rate
+
+                # 예약 생성
+                reservation = Reservation.objects.create(
+                    user=user,
+                    store_item=item,
+                    reservation_slot=store_slot,
+                    reservation_cost=discounted_cost
+                )
+
+                # 유저 할인 총액 갱신
+                user.user_discounted_cost_sum = (user.user_discounted_cost_sum or 0) + reservation.reservation_cost
+                user.save()
+
+            return Response({
+                "reservation_id": reservation.reservation_id,
+                "store_name": reservation.store_item.store.store_name,
+                "reservation_date": reservation.reservation_slot.slot_reservation_date,
+                "reservation_time": f"{reservation.reservation_slot.slot_reservation_time}:00"
+            }, status=201)
+
+        except IntegrityError:
+            # 동시성 문제 또는 DB 무결성 오류
+            return Response({"error": "동일한 상품이 이미 예약되었습니다."}, status=400)
+
+        except Exception as e:
+            # 예기치 못한 오류 로깅
+            logger.exception("예약 생성 중 예외 발생")
+            return Response({"error": "서버 내부 오류가 발생했습니다.", "detail": str(e)}, status=500)
 
 class ReserveDetail(APIView):
     permission_classes = [IsUserRole]
@@ -211,16 +248,26 @@ class LikeDetail(APIView):
         if not store_id:
             return Response({"error": "store_id 가 필요합니다."}, status = 400)
 
-        store = get_object_or_404(Store, store_id=store_id)
-    
-        # 이미 좋아요 했는지 확인
-        if UserLike.objects.filter(user=user, store=store).exists():
-            return Response({"error": "이미 좋아요를 눌렀습니다."}, status=400)
+        try:
+            # Store 존재 여부 확인
+            store = get_object_or_404(Store, store_id=store_id)
 
-        # 좋아요 생성
-        like = UserLike.objects.create(user=user, store=store)
-        # 난 처음에 user_id = user_id 이렇게 적어야 하는줄 알았는데 외래키라서 실제 UserLike 모델의 user_id에는 User 객체가 들어간대...
-    
+            # 이미 좋아요 했는지 확인
+            if UserLike.objects.filter(user=user, store=store).exists():
+                return Response({"error": "이미 좋아요를 눌렀습니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 트랜잭션 블록 - 도중에 문제 생기면 롤백
+            with transaction.atomic():
+                like = UserLike.objects.create(user=user, store=store)
+
+        except IntegrityError:
+            # DB 제약조건 위반 (중복 좋아요, 잘못된 FK 등)
+            return Response({"error": "이미 좋아요했거나 유효하지 않은 store_id입니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            # 예상 못한 오류는 서버 에러로 반환
+            return Response({"error": f"서버 오류가 발생했습니다: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         serializer = UserLikeSerializer(like)
         return Response(serializer.data, status = 201)
     
