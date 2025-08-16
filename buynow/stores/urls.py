@@ -4,6 +4,7 @@ from .views import NumOfSpacesView
 from .views import StoreSpacesDetailView
 from .views import StoreSpaceDetailView
 from .views import StoreSingleSpaceDetailView
+from .views import StoreItemDetailView
 
 urlpatterns = [
     path("", StoreListView.as_view(), name="store-list"),  # GET /v1/stores/
@@ -25,4 +26,9 @@ urlpatterns = [
         StoreSingleSpaceDetailView.as_view(),
         name="store-single-space-detail",
     ),  # GET /v1/stores/<store_id>/menus/
+    path(
+        "items/<int:item_id>/",
+        StoreItemDetailView.as_view(),
+        name="store-item-detail",
+    ),  # GET /v1/stores/items/<item_id>/
 ]

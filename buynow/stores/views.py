@@ -1,4 +1,4 @@
-from config.kakaoapi import get_distance_walktime
+from config.kakaoapi import get_distance_walktime, get_coordinates
 
 from django.shortcuts import render
 
@@ -24,95 +24,16 @@ from drf_yasg import openapi
 from datetime import datetime
 
 
-# # 거리 계산 함수 (직선거리, haversine)
-# def haversine_distance(lat1, lon1, lat2, lon2):
-#     R = 6371000  # 지구 반지름(단위: m)
-#     phi1, phi2 = math.radians(lat1), math.radians(lat2)
-#     d_phi = math.radians(lat2 - lat1)
-#     d_lambda = math.radians(lon2 - lon1)
-#     a = (
-#         math.sin(d_phi / 2) ** 2
-#         + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
-#     )
-#     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-#     return int(R * c)
-
-
-# # 도로명주소 2개 입력받아 각 위도, 경도, 도로 길이(미터) 리턴하는 외부 API 호출 함수 예시
-# # 실제 API 스펙에 따라 리턴 값 형식과 호출 내용을 수정해야 함!
-# def get_distance_and_coords_from_two_addresses(addr1: str, addr2: str):
-#     """
-#     예시: addr1, addr2 도로명주소를 받아서
-#     {
-#         'distance': 총 도로 길이 (m),
-#         'addr1_lat': 위도,
-#         'addr1_lng': 경도,
-#         'addr2_lat': 위도,
-#         'addr2_lng': 경도
-#     }
-#     형태의 dict 반환
-#     실패 시 None 반환
-#     """
-#     # 실제 API 호출 부분 (주석처리했음... 맞춰서 수정하기)
-#     """
-#     API_URL = "https://example.externalapi.com/roadlength"
-#     params = {"address1": addr1, "address2": addr2}
-#     headers = {"Authorization": "Bearer YOUR_ACCESS_TOKEN"}
-
-#     try:
-#         resp = requests.get(API_URL, headers=headers, params=params, timeout=5)
-#         resp.raise_for_status()
-#         data = resp.json()
-#         # data에서 원하는 키 읽어 리턴
-#         return {
-#             'distance': data.get('distance'),
-#             'addr1_lat': data.get('addr1_lat'),
-#             'addr1_lng': data.get('addr1_lng'),
-#             'addr2_lat': data.get('addr2_lat'),
-#             'addr2_lng': data.get('addr2_lng'),
-#         }
-#     except Exception as e:
-#         # 로깅 등 처리 가능
-#         return None
-#     """
-
-# # [더미 데이터] - 테스트용: 매 호출마다 랜덤 출력되도록 해둠... 근데 이부분 작동 안 하는듯? 아래에 하드코딩 추가함
-# dummy_cases = [
-#     {
-#         "distance": 14000,
-#         "addr1_lat": 37.5665,
-#         "addr1_lng": 126.9780,  # 서울 시청
-#         "addr2_lat": 37.4979,
-#         "addr2_lng": 127.0276,  # 강남역
-#     },
-#     {
-#         "distance": 8000,
-#         "addr1_lat": 37.5714,
-#         "addr1_lng": 126.9768,  # 광화문
-#         "addr2_lat": 37.5133,
-#         "addr2_lng": 127.1025,  # 잠실
-#     },
-#     {
-#         "distance": 25000,
-#         "addr1_lat": 37.5219,
-#         "addr1_lng": 126.9246,  # 여의도
-#         "addr2_lat": 37.4563,
-#         "addr2_lng": 126.7052,  # 인천
-#     },
-# ]
-# return random.choice(dummy_cases)
-
-
 class StoreListView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
 
     @swagger_auto_schema(
         operation_summary="가게 목록 조회",
         operation_description="""
-        지정된 시간 슬롯과 (선택적) 카테고리에 맞는 가게 리스트를 반환합니다.
-        - time: 0~36 시간 값 (24 이상이면 다음날 계산)
-        - store_category: 카테고리 필터링 가능
-        """,
+    지정된 시간 슬롯과 (선택적) 카테고리에 맞는 가게 리스트를 반환합니다.
+    - time: 0~36 시간 값 (24 이상이면 다음날 계산)
+    - store_category: 카테고리 필터링 가능
+    """,
         manual_parameters=[
             openapi.Parameter(
                 "time",
@@ -132,29 +53,44 @@ class StoreListView(APIView):
         responses={
             200: openapi.Response(
                 description="성공 시 가게 목록 반환",
-                examples={
-                    "application/json": [
-                        {
-                            "store_id": 1,
-                            "store_name": "강남 미용실",
-                            "distance": 14000,
-                            "on_foot": 200,
-                            "store_image_url": "https://example.com/store.jpg",
-                            "menu_name": "커트",
-                            "menu_id": 10,
-                            "max_discount_rate": 30,
-                            "max_discount_menu": "커트",
-                            "max_discount_price_origin": 20000,
-                            "max_discount_price": 14000,
-                            "is_liked": True,
-                            "liked_id": 55,
-                        }
-                    ]
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            "store_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                            "store_name": openapi.Schema(type=openapi.TYPE_STRING),
+                            "distance": openapi.Schema(type=openapi.TYPE_INTEGER),
+                            "on_foot": openapi.Schema(type=openapi.TYPE_INTEGER),
+                            "store_image_url": openapi.Schema(type=openapi.TYPE_STRING),
+                            "menu_name": openapi.Schema(type=openapi.TYPE_STRING),
+                            "menu_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                            "max_discount_rate": openapi.Schema(
+                                type=openapi.TYPE_INTEGER
+                            ),
+                            "max_discount_menu": openapi.Schema(
+                                type=openapi.TYPE_STRING
+                            ),
+                            "max_discount_price_origin": openapi.Schema(
+                                type=openapi.TYPE_INTEGER
+                            ),
+                            "max_discount_price": openapi.Schema(
+                                type=openapi.TYPE_INTEGER
+                            ),
+                            "is_liked": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                            "liked_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        },
+                    ),
+                ),
             ),
             400: openapi.Response(
                 description="잘못된 요청",
-                examples={"application/json": {"error": "Invalid time"}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
             ),
         },
     )
@@ -253,32 +189,6 @@ class StoreListView(APIView):
                 distance = 0
                 on_foot = 0
 
-            # # 실제 API 호출 사용 시 주석 해제, 더미 데이터 부분은 주석 처리하여 전환 가능
-            # if user_address and store_address:
-            #     # 실제 API 호출 (주석처리)
-            #     # api_result = get_distance_and_coords_from_two_addresses(user_address, store_address)
-
-            #     # 더미 데이터 사용
-            #     api_result = get_distance_and_coords_from_two_addresses(
-            #         user_address, store_address
-            #     )
-            #     if api_result:
-            #         distance = api_result.get("distance", 0)
-            #         user_lat = api_result.get("addr1_lat", 0)
-            #         user_lng = api_result.get("addr1_lng", 0)
-            #         store_lat = api_result.get("addr2_lat", 0)
-            #         store_lng = api_result.get("addr2_lng", 0)
-            #     else:
-            #         distance = 0
-            #         user_lat = user_lng = store_lat = store_lng = 0
-            # elif user_address or store_address:  # 한쪽만 주소가 있을 때
-            #     distance = 0
-            #     user_lat = user_lng = store_lat = store_lng = 0
-            # else:
-            #     distance = 0
-
-            # on_foot = distance // 70 if distance else 0  # 대략 70m/분으로 가정
-
             # 찜 정보
             is_liked, liked_id = False, 0
             like = UserLike.objects.filter(user=user, store=store).first()
@@ -317,26 +227,38 @@ class NumOfSpacesView(APIView):
     permission_classes = [AllowAny]  # 인증 필요 없음
 
     @swagger_auto_schema(
-        operation_summary="특정 Store의 Space 목록 조회",
+        operation_summary="특정 Store의 Space 개수 및 ID 목록 조회",
         operation_description="store_id에 속한 모든 Space의 개수와 space_id 목록 반환. is_active=False, is_dummy=True도 포함.",
         responses={
             200: openapi.Response(
                 description="성공",
-                examples={
-                    "application/json": {
-                        "count": 2,
-                        "space_ids": [{"space_id": 101}, {"space_id": 102}],
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "count": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "space_ids": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    "space_id": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                ),
             ),
             404: openapi.Response(
                 description="존재하지 않는 store_id",
-                examples={
-                    "application/json": {
-                        "errorCode": "STORE_NOT_FOUND",
-                        "message": "존재하지 않는 store_id입니다.",
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "errorCode": openapi.Schema(type=openapi.TYPE_STRING),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
             ),
         },
     )
@@ -371,10 +293,10 @@ class StoreSpacesDetailView(APIView):
     @swagger_auto_schema(
         operation_summary="특정 Store의 Space 상세 목록 조회",
         operation_description="""
-        특정 store_id에 해당하는 가게 기본 정보와 하위 Space 목록을 반환합니다.
-        - 쿼리 파라미터 `time`을 반드시 전달해야 합니다 (0~36 시각, int).
-        - 각 Space 항목에는 최대 할인율과 해당 시간대 예약 가능 여부를 포함합니다.
-        """,
+    특정 store_id에 해당하는 가게 기본 정보와 하위 Space 목록을 반환합니다.
+    - 쿼리 파라미터 `time`을 반드시 전달해야 합니다 (0~36 시각, int).
+    - 각 Space 항목에는 최대 할인율과 해당 시간대 예약 가능 여부를 포함합니다.
+    """,
         manual_parameters=[
             openapi.Parameter(
                 "time",
@@ -387,43 +309,60 @@ class StoreSpacesDetailView(APIView):
         responses={
             200: openapi.Response(
                 description="성공 응답",
-                examples={
-                    "application/json": {
-                        "store_name": "가게 이름",
-                        "store_category": "생활/공간",
-                        "store_address": "서울시 강남구 ...",
-                        "store_image_url": "https://example.com/image.jpg",
-                        "store_description": "1대1 필라테스",
-                        "distance": 350,
-                        "on_foot": 5,
-                        "spaces": [
-                            {
-                                "space_id": 101,
-                                "space_name": "A 강사",
-                                "space_image_url": "https://example.com/spaceA.jpg",
-                                "max_discount_rate": 20,
-                                "is_possible": True,
-                            }
-                        ],
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "store_name": openapi.Schema(type=openapi.TYPE_STRING),
+                        "store_category": openapi.Schema(type=openapi.TYPE_STRING),
+                        "store_address": openapi.Schema(type=openapi.TYPE_STRING),
+                        "store_image_url": openapi.Schema(type=openapi.TYPE_STRING),
+                        "store_description": openapi.Schema(type=openapi.TYPE_STRING),
+                        "distance": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "on_foot": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "spaces": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    "space_id": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "space_name": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "space_image_url": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "max_discount_rate": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "is_possible": openapi.Schema(
+                                        type=openapi.TYPE_BOOLEAN
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="잘못된 요청",
-                examples={
-                    "application/json": {
-                        "error": "`time` query parameter는 필수이며 정수여야 합니다."
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
             ),
             404: openapi.Response(
                 description="Store 없음",
-                examples={
-                    "application/json": {
-                        "errorCode": "STORE_NOT_FOUND",
-                        "message": "해당 store_id의 매장이 존재하지 않습니다.",
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "errorCode": openapi.Schema(type=openapi.TYPE_STRING),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
             ),
         },
     )
@@ -461,16 +400,27 @@ class StoreSpacesDetailView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        # Store 기본 정보
+        user_address = getattr(request.user, "user_address", None)
+        store_address = getattr(store, "store_address", None)
+
+        if user_address and store_address:
+            distance_km, walk_time_min = get_distance_walktime(
+                store_address, user_address
+            )
+            distance = int(distance_km * 1000) if distance_km is not None else 0
+            on_foot = int(walk_time_min) if walk_time_min is not None else 0
+        else:
+            distance = 0
+            on_foot = 0
+
         store_data = {
             "store_name": store.store_name,
             "store_category": store.store_category,
             "store_address": store.store_address,
             "store_image_url": store.store_image_url,
             "store_description": store.store_description,
-            # 거리/도보 시간은 외부에서 계산해서 주입받는다고 가정
-            "distance": request.GET.get("distance", None),
-            "on_foot": request.GET.get("on_foot", None),
+            "distance": distance,
+            "on_foot": on_foot,
             "spaces": [],
         }
 
@@ -527,56 +477,70 @@ class StoreSpaceDetailView(APIView):
         responses={
             200: openapi.Response(
                 description="성공",
-                examples={
-                    "application/json": {
-                        "store_name": "가게 이름",
-                        "space_name": "Space 이름",
-                        "space_description": "Space 소개/설명",
-                        "selected_time": "13:00",
-                        "is_liked": False,
-                        "space_id": 3,
-                        "space_image_url": "https://example.com/space_image.jpg",
-                        "menus": [
-                            {
-                                "menu_id": 45,
-                                "menu_name": "coffee",
-                                "menu_image_url": "https://example.com/menu_coffee.jpg",
-                                "menu_price": 4500,
-                                "item_id": 101,
-                                "discount_rate": 15,
-                                "discounted_price": 3825,
-                                "is_available": True,
-                            },
-                            {
-                                "menu_id": 46,
-                                "menu_name": "tea",
-                                "menu_image_url": "https://example.com/menu_tea.jpg",
-                                "menu_price": 3000,
-                                "item_id": 102,
-                                "discount_rate": 20,
-                                "discounted_price": 2400,
-                                "is_available": True,
-                            },
-                        ],
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "store_name": openapi.Schema(type=openapi.TYPE_STRING),
+                        "space_name": openapi.Schema(type=openapi.TYPE_STRING),
+                        "space_description": openapi.Schema(type=openapi.TYPE_STRING),
+                        "selected_time": openapi.Schema(type=openapi.TYPE_STRING),
+                        "is_liked": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "liked_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "space_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "space_image_url": openapi.Schema(type=openapi.TYPE_STRING),
+                        "menus": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    "menu_id": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "menu_name": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "menu_image_url": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "menu_price": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "item_id": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER, nullable=True
+                                    ),
+                                    "discount_rate": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "discounted_price": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "is_available": openapi.Schema(
+                                        type=openapi.TYPE_BOOLEAN
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="잘못된 요청",
-                examples={
-                    "application/json": {
-                        "error": "`time` query parameter는 필수이며 정수여야 합니다."
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
             ),
             404: openapi.Response(
                 description="Space 없음 또는 메뉴 없음",
-                examples={
-                    "application/json": {
-                        "errorCode": "SPACE_NOT_FOUND",
-                        "message": "공간(space_id)을 찾을 수 없습니다.",
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "errorCode": openapi.Schema(type=openapi.TYPE_STRING),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
             ),
         },
     )
@@ -720,7 +684,92 @@ class StoreSpaceDetailView(APIView):
 class StoreSingleSpaceDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
 
-    @swagger_auto_schema(...)
+    @swagger_auto_schema(
+        operation_summary="특정 Store 단일 Space 상세 조회",
+        manual_parameters=[
+            openapi.Parameter(
+                "time",
+                openapi.IN_QUERY,
+                description="조회할 시간대 (0~36)",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={  # 필요한 응답 구조 schema로 선언
+            200: openapi.Response(
+                description="성공 응답",
+                schema=openapi.Schema(  # Store 상세와 menu 필드들만 필요에 따라 타입 명시
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "store_name": openapi.Schema(type=openapi.TYPE_STRING),
+                        "store_address": openapi.Schema(type=openapi.TYPE_STRING),
+                        "store_image_url": openapi.Schema(type=openapi.TYPE_STRING),
+                        "store_description": openapi.Schema(type=openapi.TYPE_STRING),
+                        "selected_time": openapi.Schema(type=openapi.TYPE_STRING),
+                        "distance": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, nullable=True
+                        ),
+                        "on_foot": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, nullable=True
+                        ),
+                        "is_liked": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "like_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "menus": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    "menu_id": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "menu_name": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "menu_image_url": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "item_id": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER, nullable=True
+                                    ),
+                                    "discount_rate": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "discounted_price": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "menu_price": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),
+                                    "is_available": openapi.Schema(
+                                        type=openapi.TYPE_BOOLEAN
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                ),
+            ),
+            400: openapi.Response(
+                description="잘못된 요청",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
+            ),
+            404: openapi.Response(
+                description="Store/Space 없음",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "errorCode": openapi.Schema(type=openapi.TYPE_STRING),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
+            ),
+        },
+    )
     def get(self, request, store_id):
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
@@ -822,16 +871,224 @@ class StoreSingleSpaceDetailView(APIView):
                     }
                 )
 
+        user_address = getattr(request.user, "user_address", None)
+        store_address = getattr(store, "store_address", None)
+
+        if user_address and store_address:
+            distance_km, walk_time_min = get_distance_walktime(
+                store_address, user_address
+            )
+            distance = int(distance_km * 1000) if distance_km is not None else 0
+            on_foot = int(walk_time_min) if walk_time_min is not None else 0
+        else:
+            distance = 0
+            on_foot = 0
+
         store_data = {
             "store_name": store.store_name,
             "store_address": store.store_address,
             "store_image_url": store.store_image_url,
             "store_description": store.store_description,
             "selected_time": selected_time_formatted,
-            "distance": request.GET.get("distance", None),
-            "on_foot": request.GET.get("on_foot", None),
+            "distance": distance,
+            "on_foot": on_foot,
             "is_liked": is_liked,
             "like_id": like_id,
             "menus": menus_data,
         }
         return Response(store_data, status=200)
+
+
+class StoreItemDetailView(APIView):
+    permission_classes = [IsUserRole]
+
+    @swagger_auto_schema(
+        operation_summary="특정 Menu 단일 조회 (예약화면용)",
+        operation_description="특정 item_id에 대한 메뉴 및 매장, 예약 가능한 시간 등 상세 정보를 반환합니다.",
+        manual_parameters=[
+            openapi.Parameter(
+                "item_id",
+                openapi.IN_PATH,
+                description="예약하려는 건의 아이템 id",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                example=1001,
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="성공",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "store_name": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="매장 이름"
+                        ),
+                        "store_address": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="매장 주소"
+                        ),
+                        "store_image_url": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="매장 대표 이미지"
+                        ),
+                        "store_description": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="매장 설명"
+                        ),
+                        "selected_time": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="선택 시간 (HH:MM)"
+                        ),
+                        "distance": openapi.Schema(
+                            type=openapi.TYPE_INTEGER,
+                            description="거리 (미터)",
+                            nullable=True,
+                        ),
+                        "on_foot": openapi.Schema(
+                            type=openapi.TYPE_INTEGER,
+                            description="도보 시간 (분)",
+                            nullable=True,
+                        ),
+                        "is_liked": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, description="찜 여부"
+                        ),
+                        "liked_id": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, description="찜 아이디"
+                        ),
+                        "menu_id": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, description="메뉴 고유 ID"
+                        ),
+                        "menu_name": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="메뉴 이름"
+                        ),
+                        "menu_image_url": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="메뉴 대표 이미지"
+                        ),
+                        "item_id": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, description="아이템 고유 ID"
+                        ),
+                        "discount_rate": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, description="할인율(%)"
+                        ),
+                        "discounted_price": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, description="할인 적용된 가격"
+                        ),
+                        "menu_price": openapi.Schema(
+                            type=openapi.TYPE_INTEGER, description="메뉴 정가"
+                        ),
+                    },
+                ),
+            ),
+            400: openapi.Response(
+                description="잘못된 요청",
+                examples={
+                    "application/json": {
+                        "errorCode": "BAD_REQUEST",
+                        "message": "사용자 주소 또는 매장 주소가 없습니다.",
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="인증 필요",
+                examples={
+                    "application/json": {
+                        "errorCode": "UNAUTHORIZED",
+                        "message": "인증이 필요합니다.",
+                    }
+                },
+            ),
+            404: openapi.Response(
+                description="아이템 없음",
+                examples={
+                    "application/json": {
+                        "errorCode": "ITEM_NOT_FOUND",
+                        "message": "해당 item_id에 해당하는 아이템이 없습니다.",
+                    }
+                },
+            ),
+        },
+    )
+    def get(self, request, item_id):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response(
+                {"errorCode": "UNAUTHORIZED", "message": "인증이 필요합니다."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            item = StoreItem.objects.select_related("store", "menu").get(
+                item_id=item_id
+            )
+        except StoreItem.DoesNotExist:
+            return Response(
+                {
+                    "errorCode": "ITEM_NOT_FOUND",
+                    "message": "해당 item_id에 해당하는 아이템이 없습니다.",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        store = item.store
+        menu = item.menu
+        user_address = getattr(user, "user_address", None)
+        store_address = getattr(store, "store_address", None)
+
+        if not user_address or not store_address:
+            return Response(
+                {
+                    "errorCode": "BAD_REQUEST",
+                    "message": "사용자 주소 또는 매장 주소가 없습니다.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 거리, 도보 시간 계산 (km, 분 단위)
+        distance_km, walk_time_min = get_distance_walktime(store_address, user_address)
+
+        # 거리 미터 단위, 도보시간 분 단위, 없으면 null 처리
+        if distance_km is not None:
+            distance = int(distance_km * 1000)
+        else:
+            distance = None
+
+        if walk_time_min is not None:
+            on_foot = int(round(walk_time_min))
+        else:
+            on_foot = None
+
+        # 찜 정보 조회
+        is_liked = False
+        liked_id = 0
+        like = UserLike.objects.filter(user=user, store=store).first()
+        if like:
+            is_liked = True
+            liked_id = like.like_id
+
+        selected_time = f"{item.item_reservation_time}:00"
+
+        discount_rate_percent = (
+            int(item.max_discount_rate * 100) if item.max_discount_rate else 0
+        )
+        discounted_price = (
+            int(menu.menu_price * (1 - item.max_discount_rate))
+            if item.max_discount_rate
+            else menu.menu_price
+        )
+
+        data = {
+            "store_name": store.store_name,
+            "store_address": store_address,
+            "store_image_url": store.store_image_url,
+            "store_description": store.store_description,
+            "selected_time": selected_time,
+            "distance": distance,
+            "on_foot": on_foot,
+            "is_liked": is_liked,
+            "liked_id": liked_id,
+            "menu_id": menu.menu_id,
+            "menu_name": menu.menu_name,
+            "menu_image_url": menu.menu_image_url,
+            "item_id": item.item_id,
+            "discount_rate": discount_rate_percent,
+            "discounted_price": discounted_price,
+            "menu_price": menu.menu_price,
+        }
+        return Response(data)
