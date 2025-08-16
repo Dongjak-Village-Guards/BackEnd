@@ -23,6 +23,8 @@ from drf_yasg import openapi
 
 from datetime import datetime
 
+from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
+
 
 class StoreListView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
@@ -98,6 +100,9 @@ class StoreListView(APIView):
         user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
+        User = get_user_model()
+        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
+        user_address = fresh_user.user_address
 
         # 필수 파라미터 확인할 것!
         try:
@@ -108,7 +113,7 @@ class StoreListView(APIView):
             return Response({"error": "time은 0~36 사이여야 합니다."}, status=400)
 
         # JWT 인증 및 예외처리 추가
-        user_address = getattr(user, "user_address", None)
+        # user_address = getattr(user, "user_address", None)
         if not user_address:
             return Response(
                 {"error": "사용자 주소 정보가 필요합니다."}, status=400
@@ -367,8 +372,13 @@ class StoreSpacesDetailView(APIView):
         },
     )
     def get(self, request, store_id):
+        user = request.user
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
+        User = get_user_model()
+        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
+        user_address = fresh_user.user_address
+
         # 필수 쿼리 파라미터 확인
         try:
             time_filter = int(request.GET.get("time"))
@@ -400,7 +410,7 @@ class StoreSpacesDetailView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        user_address = getattr(request.user, "user_address", None)
+        # user_address = getattr(request.user, "user_address", None)
         store_address = getattr(store, "store_address", None)
 
         if user_address and store_address:
@@ -545,6 +555,7 @@ class StoreSpaceDetailView(APIView):
         },
     )
     def get(self, request, space_id):
+        user = request.user
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
         # time 쿼리 파라미터 확인 및 검증
@@ -771,6 +782,7 @@ class StoreSingleSpaceDetailView(APIView):
         },
     )
     def get(self, request, store_id):
+        user = request.user
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
         try:
@@ -810,6 +822,9 @@ class StoreSingleSpaceDetailView(APIView):
 
         # 인증된 사용자만 접근이기 때문에 바로 request.user 사용
         user = request.user
+        User = get_user_model()
+        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
+        user_address = fresh_user.user_address
 
         is_liked = False
         like_id = 0
@@ -871,7 +886,7 @@ class StoreSingleSpaceDetailView(APIView):
                     }
                 )
 
-        user_address = getattr(request.user, "user_address", None)
+        # user_address = getattr(request.user, "user_address", None)
         store_address = getattr(store, "store_address", None)
 
         if user_address and store_address:
@@ -1012,6 +1027,9 @@ class StoreItemDetailView(APIView):
                 {"errorCode": "UNAUTHORIZED", "message": "인증이 필요합니다."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        User = get_user_model()
+        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
+        user_address = fresh_user.user_address
 
         try:
             item = StoreItem.objects.select_related("store", "menu").get(
@@ -1028,7 +1046,7 @@ class StoreItemDetailView(APIView):
 
         store = item.store
         menu = item.menu
-        user_address = getattr(user, "user_address", None)
+        # user_address = getattr(user, "user_address", None)
         store_address = getattr(store, "store_address", None)
 
         if not user_address or not store_address:
