@@ -41,7 +41,6 @@ def estimate_walk_time(distance_km, speed_kmh=4.5):
 
 # kakao api로 도로명 주소 -> 좌표 변환
 def get_coordinates(address):
-    print("KAKAO KEY:", KAKAO_REST_API_KEY)
 
     if not address:
         print ("도로명 주소가 필요합니다.")
@@ -60,8 +59,8 @@ def get_coordinates(address):
 
         if not documents:
             print("주소를 찾을 수 없습니다.")
-            x = 126.953833907628
-            y = 37.5047267237807
+            x = "126.953833907628"
+            y = "37.5047267237807"
             return x,y
         
         # 첫번째 결과 가져오기
