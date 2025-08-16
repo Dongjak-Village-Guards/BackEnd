@@ -212,10 +212,21 @@ class ReserveMe(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
+        # 시간 관련
+        now = timezone.localtime()
+        today = now.date()
+        current_hour = now.hour
+
         # select_related로 N+1 문제 방지
         reservations = Reservation.objects.filter(user_id=user).select_related(
             'reservation_slot', 'store_item', 'store_item__store',
             'store_item__menu', 'store_item__space'
+        ).filter(
+            Q(reservation_slot__slot_reservation_date__gt=today) | 
+            Q(
+                reservation_slot__slot_reservation_date=today,
+                reservation_slot__slot_reservation_time__gte=current_hour
+            )
         ).order_by(
             'reservation_slot__slot_reservation_date', 
             'reservation_slot__slot_reservation_time'
