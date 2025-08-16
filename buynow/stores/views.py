@@ -171,7 +171,20 @@ class StoreListView(APIView):
         if not 0 <= time_filter <= 36:
             return Response({"error": "time은 0~36 사이여야 합니다."}, status=400)
 
-        category = request.GET.get("store_category")
+        category = request.GET.get("store_category", None)
+
+        qs = StoreItem.objects.filter(
+            item_reservation_date=target_date,
+            item_reservation_time=target_time,
+            item_stock__gt=0,
+            store__is_active=True,
+        )
+
+        if category is not None:
+            # 공백 제거 후 빈문자열이면 필터링하지 않음
+            normalized_category = category.strip()
+            if normalized_category != "":
+                qs = qs.filter(store__store_category__iexact=normalized_category)
 
         # JWT 인증 및 예외처리 추가
         user_address = getattr(user, "user_address", None)
@@ -194,8 +207,6 @@ class StoreListView(APIView):
             item_stock__gt=0,
             store__is_active=True,
         )
-        if category:
-            qs = qs.filter(store__store_category=category)
 
         # 가게별 최대 할인율 계산
         max_discounts = qs.values("store_id").annotate(
