@@ -1,6 +1,6 @@
 from django.shortcuts import render
 
-from buynow.accounts.permissions import IsUserRole
+from accounts.permissions import IsUserRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
