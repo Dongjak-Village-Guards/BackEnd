@@ -2,6 +2,8 @@ import os,json,math,requests
 from pathlib import Path
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from stores.models import Store
+from rest_framework.generics import get_object_or_404
 
 
 
@@ -89,3 +91,31 @@ def get_distance_walktime(store_address, user_address):
     walk_time_min = estimate_walk_time(distance_km)
 
     return distance_km, walk_time_min
+
+# 가짜 가게 주소 -> 중앙대 주소로 바꾸는 함수
+def change_to_cau(store_address):
+
+    if not store_address:
+        print("store_address와 store을 입력해야 합니다.")
+        return None
+    
+    kakao_api_url = "https://dapi.kakao.com/v2/local/search/address.json"
+    headers = {"Authorization" : f"KakaoAK {KAKAO_REST_API_KEY}"}
+    params = {"query" : f"{store_address}"}
+
+    try :
+        response = requests.get(kakao_api_url, headers=headers, params=params)
+        response.raise_for_status()
+
+        data = response.json()
+        documents = data.get("documents")
+
+        if not documents:
+            new_address = "서울특별시 동작구 흑석로 84"
+            return new_address
+        
+        return None
+        
+    except requests.RequestException as e:
+        print(f"Kakao API 요청 실패 : {e}")
+        return None

@@ -7,6 +7,7 @@ from .views import StoreSingleSpaceDetailView
 from .views import StoreItemDetailView
 
 from .views import view_func
+from .views import MakeAddress
 
 urlpatterns = [
     # 로깅 관련
@@ -36,4 +37,7 @@ urlpatterns = [
         StoreItemDetailView.as_view(),
         name="store-item-detail",
     ),  # GET /v1/stores/items/<item_id>/
+
+    # 가짜 주소 관련
+    path('cau/', MakeAddress.as_view(), name="change_to_cau"),
 ]

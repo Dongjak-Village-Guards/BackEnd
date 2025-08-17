@@ -8,7 +8,7 @@ from drf_yasg import openapi
 from rest_framework.generics import get_object_or_404
 
 from .models import User
-from .serializers import GoogleLoginSerializer, AdminLoginSerializer, UserSerializer
+from .serializers import GoogleLoginSerializer, AdminLoginSerializer, UserSerializer, OwnerLoginSerializer
 from config.authentication import FirebaseIDTokenAuthentication
 from .permissions import *
 
@@ -122,6 +122,50 @@ class AdminLoginAPIView(APIView):
 
 
 # 공급자 로그인 기능
+class OwnerLoginAPIView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []  # JWT 필요 없음
+
+    @swagger_auto_schema(
+        operation_summary="Owner 로그인",
+        operation_description="공급자 로그인/회원가입 후 JWT 토큰 발급",
+        request_body=OwnerLoginSerializer,
+        responses={
+            200: openapi.Response(
+                description="공급자 로그인/회원가입 성공",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "user_email" : openapi.Schema(type=openapi.TYPE_STRING),
+                        "user_role": openapi.Schema(type=openapi.TYPE_STRING),
+                        "access_token": openapi.Schema(type=openapi.TYPE_STRING),
+                        "refresh_token": openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            ),
+            400: "유효하지 않은 요청",
+        }
+    )
+    def post(self, request):
+        serializer = OwnerLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+
+        #user = result["user"]
+        user_email = result["user_email"]
+        user_role = result["user_role"]
+        created = result["created"]
+        message = "공급자 회원가입 성공" if created else "공급자 로그인 성공"
+
+        return Response({
+            "message": message,
+            "user_email" : user_email,
+            "user_role": user_role,
+            "access_token": result["access_token"],
+            "refresh_token": result["refresh_token"]
+        }, status=status.HTTP_200_OK)
+
 
 # refresh로 access 토큰 재발급
 class TokenRefreshAPIView(APIView):
