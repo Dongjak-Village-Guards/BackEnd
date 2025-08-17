@@ -25,9 +25,18 @@ from accounts.permissions import *
 # 예외 처리 구문 추가
 from django.db import IntegrityError, transaction
 from rest_framework import status
-import logging
 
-logger = logging.getLogger(__name__)
+# 로깅 파일
+from logger import get_logger
+
+logger = get_logger("buynow.reservations")
+
+def view_func(request):
+    logger.info("배포 서버에서 호출됨")
+    try:
+        1 / 0
+    except Exception as e:
+        logger.error(f"에러 발생: {e}")
 
 # Create your views here.
 

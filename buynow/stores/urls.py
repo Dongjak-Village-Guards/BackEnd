@@ -6,7 +6,12 @@ from .views import StoreSpaceDetailView
 from .views import StoreSingleSpaceDetailView
 from .views import StoreItemDetailView
 
+from .views import view_func
+
 urlpatterns = [
+    # 로깅 관련
+    path('test-logger/', view_func, name='test_logger'),
+
     path("", StoreListView.as_view(), name="store-list"),  # GET /v1/stores/
     path(
         "<int:store_id>/", NumOfSpacesView.as_view(), name="num-of-spaces"

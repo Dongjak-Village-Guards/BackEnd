@@ -25,6 +25,20 @@ from datetime import datetime
 
 from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
 
+# 로깅 파일
+from logger import get_logger
+
+logger = get_logger("buynow.stores")
+
+def view_func(request):
+    logger.info("배포 서버에서 호출됨")
+    try:
+        1 / 0
+    except Exception as e:
+        logger.error(f"에러 발생: {e}")
+
+from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
+
 
 class StoreListView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능

@@ -2,6 +2,9 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
+    # 로깅 관련
+    path('test-logger/', view_func, name='test_logger'),
+
     # UserLike api 관련
     path('userlikes/', LikeDetail.as_view(), name = 'userlike'),
 
