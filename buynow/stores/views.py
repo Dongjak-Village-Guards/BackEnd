@@ -2,7 +2,7 @@ from config.kakaoapi import get_distance_walktime, get_coordinates
 
 from django.shortcuts import render
 
-from accounts.permissions import IsUserRole
+from accounts.permissions import IsUserRole, IsAdminRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -14,6 +14,7 @@ import random  # 더미 데이터 랜덤 선택용!
 
 from .models import Store, StoreItem, StoreSpace, StoreMenu, StoreMenuSpace
 from reservations.models import UserLike
+from config.kakaoapi import change_to_cau
 
 from rest_framework import status
 
@@ -1124,3 +1125,33 @@ class StoreItemDetailView(APIView):
             "menu_price": menu.menu_price,
         }
         return Response(data)
+
+
+# 가짜 주소 Store 갱신하기
+class MakeAddress(APIView):
+    permission_classes = [IsAdminRole]
+
+    @swagger_auto_schema(
+        operation_summary="User 주소 업데이트",
+        operation_description="User 본인의 도로명 주소(user_address)를 업데이트합니다.",
+        responses={200: "주소 수정 완료", 401: "인증이 필요합니다."}
+    )
+    def patch(self, request):
+        stores = Store.objects.all()
+
+        stores_to_update = []
+        for store in stores:
+            store_address = store.store_address
+            new_address = change_to_cau(store_address)
+
+            if new_address is None:
+                continue
+            
+            store.store_address = new_address
+            #store.save()
+            stores_to_update.append(store) # DB 효율 위해 모아놨다가 한번에 업데이트
+        
+        Store.objects.bulk_update(stores_to_update, ['store_address'])
+
+        return Response({"message" : "주소 수정 완료"})
+    
