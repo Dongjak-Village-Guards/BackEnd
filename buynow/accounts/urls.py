@@ -13,6 +13,7 @@ urlpatterns = [
     # User api 관련
     path('user/', UserList.as_view(), name = 'user_list'),
     path('user/<int:user_id>/', UserDetail.as_view(), name='user_detail'),
-    path('user/me/', UserMe.as_view(), name = 'user_me')
+    path('user/me/', UserMe.as_view(), name = 'user_me'),
+
 
 ]

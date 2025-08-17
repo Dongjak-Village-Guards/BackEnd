@@ -15,6 +15,7 @@ from .permissions import *
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+from config.kakaoapi import *
 
 # 로깅 파일
 from logger import get_logger
@@ -200,3 +201,32 @@ class UserMe(APIView):
         serializer = UserSerializer(user)
         return Response(serializer.data)
     
+    @swagger_auto_schema(
+        operation_summary="User 주소 업데이트",
+        operation_description="User 본인의 도로명 주소(user_address)를 업데이트합니다.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'user_address': openapi.Schema(type=openapi.TYPE_STRING, description='도로명 주소'),
+            },
+            required=['user_address'],
+        ),
+        responses={200: UserSerializer, 400: "주소가 필요합니다.", 401: "인증이 필요합니다."}
+    )
+    def patch(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+
+        user_address = request.data.get("user_address")
+        if not user_address:
+            return Response({"error": "주소가 필요합니다."}, status=400)
+
+        # User 모델에 필드 업데이트
+        user.user_address = user_address
+        user.save()
+
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+    
+
