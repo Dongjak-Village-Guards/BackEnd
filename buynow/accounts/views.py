@@ -16,6 +16,18 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 
 
+# 로깅 파일
+from logger import get_logger
+
+logger = get_logger("buynow.accounts")
+
+def view_func(request):
+    logger.info("배포 서버에서 호출됨")
+    try:
+        1 / 0
+    except Exception as e:
+        logger.error(f"에러 발생: {e}")
+
 # ----------------------------
 # 로그인 & 토큰 관련 view
 # ----------------------------

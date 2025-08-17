@@ -2,6 +2,9 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
+    # 로깅 관련
+    path('test-logger/', view_func, name='test_logger'),
+
     # 로그인 & 토큰 관련
     path('login/', GoogleLoginAPIView.as_view(), name = 'login'),
     path('login/admin/', AdminLoginAPIView.as_view(), name = 'admin_login'),

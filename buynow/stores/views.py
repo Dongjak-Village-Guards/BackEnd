@@ -20,6 +20,18 @@ from drf_yasg import openapi
 
 from datetime import datetime
 
+# 로깅 파일
+from logger import get_logger
+
+logger = get_logger("buynow.stores")
+
+def view_func(request):
+    logger.info("배포 서버에서 호출됨")
+    try:
+        1 / 0
+    except Exception as e:
+        logger.error(f"에러 발생: {e}")
+
 
 # 거리 계산 함수 (직선거리, haversine)
 def haversine_distance(lat1, lon1, lat2, lon2):
