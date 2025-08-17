@@ -39,5 +39,5 @@ urlpatterns = [
     ),  # GET /v1/stores/items/<item_id>/
 
     # 가짜 주소 관련
-    path('cau/', MakeAddress, name="change_to_cau"),
+    path('cau/', MakeAddress.as_view(), name="change_to_cau"),
 ]
