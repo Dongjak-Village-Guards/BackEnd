@@ -111,7 +111,7 @@ class ReserveList(APIView):
                 item_datetime = datetime.datetime.combine(
                     item.item_reservation_date, time(hour=item.item_reservation_time)
                 )
-                if item_datetime <= datetime.now():
+                if item_datetime <= datetime.datetime.now():
                     return Response(
                         {"error": "이전 시간의 예약은 불가능합니다."}, status=400
                     )
