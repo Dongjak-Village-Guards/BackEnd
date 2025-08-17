@@ -94,6 +94,36 @@ class AdminLoginSerializer(serializers.Serializer):
         refresh = RefreshToken.for_user(user)
         return str(refresh.access_token), str(refresh)
 
+# 공급자 회원가입/로그인 관련 시리얼라이저
+class OwnerLoginSerializer(serializers.Serializer):
+    owner_email = serializers.CharField()
+    owner_password = serializers.CharField(write_only=True)
+
+    def create(self, attrs):
+        password = make_password(attrs["owner_password"])
+        user, created = User.objects.get_or_create(
+            user_email=attrs["owner_email"],
+            defaults={
+                "user_role": "owner",
+                "password": password,
+                "is_staff": True,
+                "is_superuser": False,
+            },
+        )
+        access_token, refresh_token = self._generate_tokens(user)
+        return {
+            "user": user,
+            "user_email" : user.user_email,
+            "user_role" : "owner",
+            "created": created,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        }
+
+    def _generate_tokens(self, user):
+        refresh = RefreshToken.for_user(user)
+        return str(refresh.access_token), str(refresh)
+
 
 # User API 관련 시리얼라이저 --------------------------------------------
 class UserSerializer(serializers.ModelSerializer):
