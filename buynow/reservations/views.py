@@ -8,7 +8,10 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db.models import Max, Q
 from django.utils import timezone
-import datetime, time
+
+# import datetime, time
+import datetime
+from datetime import time
 from django.db import transaction
 
 # 모델
