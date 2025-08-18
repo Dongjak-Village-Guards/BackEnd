@@ -8,7 +8,10 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db.models import Max, Q
 from django.utils import timezone
-import datetime, time
+
+# import datetime, time
+import datetime
+from datetime import time
 from django.db import transaction
 
 # 모델
@@ -31,12 +34,14 @@ from logger import get_logger
 
 logger = get_logger("buynow.reservations")
 
+
 def view_func(request):
     logger.info("배포 서버에서 호출됨")
     try:
         1 / 0
     except Exception as e:
         logger.error(f"에러 발생: {e}")
+
 
 # Create your views here.
 
@@ -103,10 +108,10 @@ class ReserveList(APIView):
                 )
 
                 # 현재 시간보다 이전 예약이면 예약 불가
-                item_datetime = datetime.combine(
+                item_datetime = datetime.datetime.combine(
                     item.item_reservation_date, time(hour=item.item_reservation_time)
                 )
-                if item_datetime <= datetime.now():
+                if item_datetime <= datetime.datetime.now():
                     return Response(
                         {"error": "이전 시간의 예약은 불가능합니다."}, status=400
                     )
