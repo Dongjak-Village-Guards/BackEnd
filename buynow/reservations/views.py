@@ -231,10 +231,14 @@ class ReserveDetail(APIView):
         reservation_datetime = timezone.make_aware(reservation_datetime)
         now = timezone.now()
 
-        # 30분 전인지 확인
+        # 30분 전인지 확인 - 에러코드 추가
         if reservation_datetime - now < datetime.timedelta(minutes=30):
             return Response(
-                {"error": "예약 취소는 예약 30분 전까지 가능합니다."}, status=400
+                {
+                    "errorCode": "CANCELLATION_NOT_ALLOWED",
+                    "message": "예약 시작 30분 이내에는 취소가 불가능합니다.",
+                },
+                status=400,
             )
 
         # User의 discounted_cost_sum 수정
