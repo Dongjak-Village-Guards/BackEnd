@@ -31,12 +31,14 @@ from logger import get_logger
 
 logger = get_logger("buynow.stores")
 
+
 def view_func(request):
     logger.info("배포 서버에서 호출됨")
     try:
         1 / 0
     except Exception as e:
         logger.error(f"에러 발생: {e}")
+
 
 from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
 
@@ -464,13 +466,26 @@ class StoreSpacesDetailView(APIView):
             max_discount_percent = int(max_discount * 100) if max_discount else 0
 
             # 예약 가능 여부 판정
-            is_possible = StoreItem.objects.filter(
+            # 재고가 0인 아이템이 하나라도 있는지 체크
+            has_zero_stock = StoreItem.objects.filter(
                 store=store,
                 space=space,
                 item_reservation_date=target_date,
                 item_reservation_time=target_time,
-                item_stock__gt=0,
+                item_stock=0,
             ).exists()
+
+            if has_zero_stock:
+                is_possible = False
+            else:
+                # 재고 1 이상인 아이템 존재 여부
+                is_possible = StoreItem.objects.filter(
+                    store=store,
+                    space=space,
+                    item_reservation_date=target_date,
+                    item_reservation_time=target_time,
+                    item_stock__gt=0,
+                ).exists()
 
             store_data["spaces"].append(
                 {
@@ -1134,7 +1149,7 @@ class MakeAddress(APIView):
     @swagger_auto_schema(
         operation_summary="User 주소 업데이트",
         operation_description="User 본인의 도로명 주소(user_address)를 업데이트합니다.",
-        responses={200: "주소 수정 완료", 401: "인증이 필요합니다."}
+        responses={200: "주소 수정 완료", 401: "인증이 필요합니다."},
     )
     def patch(self, request):
         stores = Store.objects.all()
@@ -1146,12 +1161,11 @@ class MakeAddress(APIView):
 
             if new_address is None:
                 continue
-            
-            store.store_address = new_address
-            #store.save()
-            stores_to_update.append(store) # DB 효율 위해 모아놨다가 한번에 업데이트
-        
-        Store.objects.bulk_update(stores_to_update, ['store_address'])
 
-        return Response({"message" : "주소 수정 완료"})
-    
+            store.store_address = new_address
+            # store.save()
+            stores_to_update.append(store)  # DB 효율 위해 모아놨다가 한번에 업데이트
+
+        Store.objects.bulk_update(stores_to_update, ["store_address"])
+
+        return Response({"message": "주소 수정 완료"})
