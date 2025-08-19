@@ -117,6 +117,7 @@ class OwnerLoginSerializer(serializers.Serializer):
         access_token, refresh_token = self._generate_tokens(user)
         return {
             "user": user,
+            "user_id" : user.id,
             "user_email" : user.user_email,
             "user_role" : "owner",
             "access_token": access_token,

@@ -153,12 +153,14 @@ class OwnerLoginAPIView(APIView):
         result = serializer.validated_data()
 
         #user = result["user"]
+        user_id = result["user_id"]
         user_email = result["user_email"]
         user_role = result["user_role"]
         message = "공급자 로그인 성공"
 
         return Response({
             "message": message,
+            "user_id" : user_id,
             "user_email" : user_email,
             "user_role": user_role,
             "access_token": result["access_token"],
