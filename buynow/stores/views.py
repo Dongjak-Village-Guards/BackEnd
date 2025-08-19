@@ -1170,8 +1170,7 @@ class OwnerStore(APIView):
         if not user or not user.is_authenticated :
             return Response({"error : 인증이 필요합니다."}, status = 401)
         
-        if user.user_role != "owner":
-            return Response({"error : 권한이 없습니다."}, status = 403)
+        
         
         store_id = request.data.get("store_id")
         if not store_id:
@@ -1201,8 +1200,7 @@ class OwnerStore(APIView):
         if not user or not user.is_authenticated :
             return Response({"error : 인증이 필요합니다."}, status = 401)
         
-        if user.user_role != "owner":
-            return Response({"error : 권한이 없습니다."}, status = 403)
+        
 
         store = get_object_or_404(Store, store_owner = user)
 
