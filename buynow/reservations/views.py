@@ -489,3 +489,61 @@ class LikeDetail(APIView):
         # 좋아요 삭제
         like.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# 공급자 관련 api
+
+# 공급자용 예약 조회, 예약 취소
+class OwnerReservation(APIView):
+    permission_classes = [IsOwnerRole]
+
+
+# 공급자용 make slot closed
+class OwnerClosed(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def patch(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+
+        slot_id = request.data.get("slot_id")
+        if not slot_id:
+            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        if slot.is_reserved == False:
+            return Response({"error" : "is_reserved 가 false 입니다. 잘못된 요청"}, status = 400)
+        
+        slot.is_reserved = False
+        slot.save()
+
+        return Response({"message" : f"{slot.slot_id} closed"}, status=status.HTTP_200_OK)
+
+
+# 공급자용 make slot opened
+class OwnerOpen(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def patch(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+
+        slot_id = request.data.get("slot_id")
+        if not slot_id:
+            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        if slot.is_reserved == True:
+            return Response({"error" : "is_reserved 가 true 입니다. 잘못된 요청"}, status = 400)
+        
+        # 해당 slot을 fk로 가지고 있는 Reservation 데이터가 있는지
+        existing_reservation = Reservation.objects.filter(reservation_slot=slot).exists()
+        if existing_reservation:
+            return Response({"error": "이 슬롯과 연결된 예약이 이미 존재합니다. 잘못된 요청"}, status=400)
+
+        slot.is_reserved = True
+        slot.save()
+
+        return Response({"message" : f"{slot.slot_id} open"}, status=status.HTTP_200_OK)
