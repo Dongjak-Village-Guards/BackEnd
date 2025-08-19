@@ -245,6 +245,13 @@ class ReserveDetail(APIView):
         user.user_discounted_cost_sum -= reservation.reservation_cost
         user.save()
 
+        # item 
+        item = reservation.store_item
+
+        # 재고 원상복구
+        item.item_stock += 1
+        item.save()
+
         # 예약 삭제
         reservation.delete()
 
