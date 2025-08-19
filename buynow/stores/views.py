@@ -2,7 +2,7 @@ from config.kakaoapi import get_distance_walktime, get_coordinates
 
 from django.shortcuts import render
 
-from accounts.permissions import IsUserRole, IsAdminRole
+from accounts.permissions import IsUserRole, IsAdminRole, IsOwnerRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -17,6 +17,7 @@ from reservations.models import UserLike
 from config.kakaoapi import change_to_cau
 
 from rest_framework import status
+from rest_framework.generics import get_object_or_404
 
 # Swagger 관련 import
 from drf_yasg.utils import swagger_auto_schema
@@ -1154,4 +1155,62 @@ class MakeAddress(APIView):
         Store.objects.bulk_update(stores_to_update, ['store_address'])
 
         return Response({"message" : "주소 수정 완료"})
-    
+
+# 공급자용 가게 등록/조회 하기
+class OwnerStore(APIView):
+    permission_classes = [IsOwnerRole]
+
+    @swagger_auto_schema(
+        operation_summary="Owner 자기 Store 등록",
+        operation_description="store_owner 에 본인을 등록합니다.",
+        responses={200: "가게 등록 완료", 401: "인증이 필요합니다.", 403: "권한이 없습니다",404 : "해당 store_id 의 store가 존재하지 않음"}
+    )
+    def post(self,request):
+        user = request.user
+        if not user or not user.is_authenticated :
+            return Response({"error : 인증이 필요합니다."}, status = 401)
+        
+        if user.user_role != "owner":
+            return Response({"error : 권한이 없습니다."}, status = 403)
+        
+        store_id = request.data.get("store_id")
+        if not store_id:
+            return Response ({"error": "store_id가 필요합니다."}, status=400)
+        store = get_object_or_404(Store, store_id=store_id)
+
+        store.store_owner = user
+        store.save()
+
+        return Response({
+            "message": "가게 등록 성공",
+            "store_id" : store.store_id,
+            "store_name" : store.store_name,
+            "store_category": store.store_category,
+            "store_address": store.store_address,
+            "store_image_url": store.store_image_url,
+            "store_description" : store.store_description
+        }, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_summary="Owner 자기 Store 조회",
+        operation_description="Owner 본인의 가게 정보를 조회합니다.",
+        responses={200: "가게 조회 완료", 401: "인증이 필요합니다.", 403: "권한이 없습니다", 404 : "해당 owner의 store가 존재하지 않음"}
+    )
+    def get(self, request):
+        user = request.user
+        if not user or not user.is_authenticated :
+            return Response({"error : 인증이 필요합니다."}, status = 401)
+        
+        if user.user_role != "owner":
+            return Response({"error : 권한이 없습니다."}, status = 403)
+
+        store = get_object_or_404(Store, store_owner = user)
+
+        return Response({
+            "store_id" : store.store_id,
+            "store_name" : store.store_name,
+            "store_category": store.store_category,
+            "store_address": store.store_address,
+            "store_image_url": store.store_image_url,
+            "store_description" : store.store_description
+        }, status=status.HTTP_200_OK)
