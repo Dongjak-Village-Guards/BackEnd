@@ -514,33 +514,36 @@ class OwnerReservation(APIView):
         
         slot = get_object_or_404(StoreSlot, slot_id = slot_id)
 
-        if slot.is_reserved == False:
-            return Response({"error" : "is_reserved 가 true 입니다. 잘못된 요청"}, status = 400)
+        if slot.is_reserved == False: # 예약이 아직 안되어있다는 거니까.
+            return Response({"error" : "is_reserved 가 false 입니다. 잘못된 요청"}, status = 400)
         
-        # 해당 slot을 fk로 가지고 있는 Reservation 데이터가 없으면 -> 예약 취소가 아니니까.
-        existing_reservation = Reservation.objects.filter(reservation_slot=slot).exists()
-        if not existing_reservation:
-            return Response({"error": "이 슬롯과 연결된 예약이 없습니다. 잘못된 요청"}, status=400)
+        # reservation 가져오기
+        reservation = get_object_or_404(
+            Reservation,
+            reservation_slot = slot,
+            reservation_id=reservation_id
+        )
         
-        # 예약한 user의 discounted_cost_sum 돌려놓기
-        reservation_user = existing_reservation.user
-        reservation_user.user_discounted_cost_sum -= existing_reservation.reservation_cost
-        reservation_user.save()
+        with transaction.atomic():
+            # 예약한 user의 discounted_cost_sum 돌려놓기
+            reservation_user = reservation.user
+            reservation_user.user_discounted_cost_sum -= reservation.reservation_cost
+            reservation_user.save()
 
-        item = existing_reservation.store_item
+            item = reservation.store_item
 
-        # item 재고 돌려놓기
-        item.item_stock += 1
-        item.save()
+            # item 재고 돌려놓기
+            item.item_stock += 1
+            item.save()
 
-        # reservation delete
-        existing_reservation.delete()
+            # reservation delete
+            reservation.delete()
 
-        # slot 상태 변경하기
-        slot.is_reserved = False
-        slot.save()
+            # slot 상태 변경하기
+            slot.is_reserved = False
+            slot.save()
 
-        return Response({"message" : "예약 취소 성공"}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message" : "예약 취소 성공"}, status=200)
 
 
 
