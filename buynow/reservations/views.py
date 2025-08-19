@@ -491,11 +491,57 @@ class LikeDetail(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# 공급자 관련 api
+# 공급자 관련 api ------------------------------------
 
 # 공급자용 예약 조회, 예약 취소
 class OwnerReservation(APIView):
     permission_classes = [IsOwnerRole]
+    # 예약 조회
+
+    # 예약 취소
+    def delete(self,request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+        
+        slot_id = request.data.get("slot_id")
+        if not slot_id:
+            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        
+        reservation_id = request.data.get("reservation_id")
+        if not reservation_id:
+            return Response({"error" : "reservation_id 가 없습니다."}, status = 400)
+        
+        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        if slot.is_reserved == False:
+            return Response({"error" : "is_reserved 가 true 입니다. 잘못된 요청"}, status = 400)
+        
+        # 해당 slot을 fk로 가지고 있는 Reservation 데이터가 없으면 -> 예약 취소가 아니니까.
+        existing_reservation = Reservation.objects.filter(reservation_slot=slot).exists()
+        if not existing_reservation:
+            return Response({"error": "이 슬롯과 연결된 예약이 없습니다. 잘못된 요청"}, status=400)
+        
+        # 예약한 user의 discounted_cost_sum 돌려놓기
+        reservation_user = existing_reservation.user
+        reservation_user.user_discounted_cost_sum -= existing_reservation.reservation_cost
+        reservation_user.save()
+
+        item = existing_reservation.store_item
+
+        # item 재고 돌려놓기
+        item.item_stock += 1
+        item.save()
+
+        # reservation delete
+        existing_reservation.delete()
+
+        # slot 상태 변경하기
+        slot.is_reserved = False
+        slot.save()
+
+        return Response({"message" : "예약 취소 성공"}, status=status.HTTP_204_NO_CONTENT)
+
 
 
 # 공급자용 make slot closed
@@ -512,10 +558,11 @@ class OwnerClosed(APIView):
             return Response({"error" : "slot_id 가 없습니다."}, status = 400)
         slot = get_object_or_404(StoreSlot, slot_id = slot_id)
 
-        if slot.is_reserved == False:
-            return Response({"error" : "is_reserved 가 false 입니다. 잘못된 요청"}, status = 400)
+        # 예약 가능한 (예약 안된) slot을 예약 못하게 하는거니까.
+        if slot.is_reserved == True: # True 면 이미 예약이 되어있으니까 이미 예약 못하는거잖아. 그니까 에러.
+            return Response({"error" : "is_reserved 가 true 입니다. 잘못된 요청"}, status = 400)
         
-        slot.is_reserved = False
+        slot.is_reserved = True
         slot.save()
 
         return Response({"message" : f"{slot.slot_id} closed"}, status=status.HTTP_200_OK)
@@ -535,15 +582,16 @@ class OwnerOpen(APIView):
             return Response({"error" : "slot_id 가 없습니다."}, status = 400)
         slot = get_object_or_404(StoreSlot, slot_id = slot_id)
 
-        if slot.is_reserved == True:
-            return Response({"error" : "is_reserved 가 true 입니다. 잘못된 요청"}, status = 400)
+        # 수동 마감(예약 안되게끔) 했던 slot을 예약 가능하게 하는거니까.
+        if slot.is_reserved == False:  # false 면 이미 예약해도 되는 거니까 잘못된거지.
+            return Response({"error" : "is_reserved 가 false 입니다. 잘못된 요청"}, status = 400)
         
         # 해당 slot을 fk로 가지고 있는 Reservation 데이터가 있는지
         existing_reservation = Reservation.objects.filter(reservation_slot=slot).exists()
         if existing_reservation:
             return Response({"error": "이 슬롯과 연결된 예약이 이미 존재합니다. 잘못된 요청"}, status=400)
 
-        slot.is_reserved = True
+        slot.is_reserved = False
         slot.save()
 
         return Response({"message" : f"{slot.slot_id} open"}, status=status.HTTP_200_OK)
