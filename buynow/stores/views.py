@@ -6,7 +6,7 @@ from accounts.permissions import IsUserRole, IsAdminRole, IsOwnerRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.db.models import Q, Max
+from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField
 from datetime import datetime, timedelta
 import math
 import requests  # 외부 api 호출용
@@ -32,12 +32,14 @@ from logger import get_logger
 
 logger = get_logger("buynow.stores")
 
+
 def view_func(request):
     logger.info("배포 서버에서 호출됨")
     try:
         1 / 0
     except Exception as e:
         logger.error(f"에러 발생: {e}")
+
 
 from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
 
@@ -48,10 +50,10 @@ class StoreListView(APIView):
     @swagger_auto_schema(
         operation_summary="가게 목록 조회",
         operation_description="""
-    지정된 시간 슬롯과 (선택적) 카테고리에 맞는 가게 리스트를 반환합니다.
-    - time: 0~36 시간 값 (24 이상이면 다음날 계산)
-    - store_category: 카테고리 필터링 가능
-    """,
+        지정된 시간 슬롯과 (선택적) 카테고리에 맞는 가게 리스트를 반환합니다.
+        - time: 0~36 시간 값 (24 이상이면 다음날 계산)
+        - store_category: 카테고리 필터링 가능
+        """,
         manual_parameters=[
             openapi.Parameter(
                 "time",
@@ -128,8 +130,6 @@ class StoreListView(APIView):
         if not 0 <= time_filter <= 36:
             return Response({"error": "time은 0~36 사이여야 합니다."}, status=400)
 
-        # JWT 인증 및 예외처리 추가
-        # user_address = getattr(user, "user_address", None)
         if not user_address:
             return Response(
                 {"error": "사용자 주소 정보가 필요합니다."}, status=400
@@ -143,102 +143,136 @@ class StoreListView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        filters = {
+        # 기존 필터 조건에서 item_stock__gt=0 제거 —> 재고 0인 아이템 확인해야 하므로 따로 처리
+        base_filters = {
             "item_reservation_date": target_date,
             "item_reservation_time": target_time,
-            "item_stock__gt": 0,
             "store__is_active": True,
         }
 
-        if category is not None:
+        if category:
             normalized_category = category.strip().strip('"')
             if normalized_category != "":
-                filters["store__store_category__iexact"] = normalized_category
+                base_filters["store__store_category__iexact"] = normalized_category
 
-        qs = StoreItem.objects.filter(**filters)
-
-        # 가게별 최대 할인율 계산
-        max_discounts = qs.values("store_id").annotate(
-            max_rate=Max("max_discount_rate")
+        # 1. 모든 StoreItem 조회 (재고 0 포함)
+        all_items_qs = StoreItem.objects.filter(**base_filters).select_related(
+            "store", "menu", "space"
         )
 
-        # 가게별 최대 할인율에 해당하는 StoreItem만 선택
-        filtered_items = []
-        use_cheaper_on_tie = True  # 같은 할인율이면 더 저렴한 메뉴 선택 여부!
-        for md in max_discounts:
-            store_id = md["store_id"]
-            max_rate = md["max_rate"]
+        # 2. space별로 재고 0인 item 존재 여부 집계 -> 비활성 Space 판단
+        space_stock_zeros = (
+            all_items_qs.values("space_id", "store_id")
+            .annotate(zero_stock_count=Count("item_id", filter=Q(item_stock=0)))
+            .filter(zero_stock_count__gt=0)
+        )
+
+        # 비활성화된 space id 집합
+        inactive_space_ids = set(space["space_id"] for space in space_stock_zeros)
+
+        # 3. 활성화된 StoreItem만 필터링 (해당 시간대 + 재고 > 0 + space_id not in 비활성 space)
+        active_items_qs = all_items_qs.filter(item_stock__gt=0).exclude(
+            space_id__in=inactive_space_ids
+        )
+
+        # 4. 활성화된 space가 한 개라도 있는 store_id 집합
+        active_store_ids = active_items_qs.values_list("store_id", flat=True).distinct()
+
+        # 5. 그 store_id에 해당하는 StoreItem만 필터링
+        filtered_items_qs = active_items_qs.filter(store_id__in=active_store_ids)
+
+        # 6. store별 최대 할인율 계산 (할인율 큰 순 정렬을 위해 max_discount_rate, 할인금액 계산 필드 추가)
+        # 할인 금액 컬럼(ExpressionWrapper) 추가
+        discount_amount_expr = ExpressionWrapper(
+            F("menu__menu_price") * F("max_discount_rate"), output_field=FloatField()
+        )
+
+        max_discount_items = (
+            filtered_items_qs.annotate(discount_amount=discount_amount_expr)
+            .values("store_id")
+            .annotate(
+                max_discount_rate=Max("max_discount_rate"),
+                max_discount_amount=Max("discount_amount"),
+            )
+        )
+
+        # 7. 최대 할인 금액 기준 오름차순 정렬 후 각 store별 최대 할인율 아이템 선택
+        results = []
+        use_cheaper_on_tie = True  # 할인액이 같으면 더 저렴한 메뉴 선택 판단
+
+        for discount_data in max_discount_items:
+            store_id = discount_data["store_id"]
+            max_rate = discount_data["max_discount_rate"]
+            max_amount = discount_data["max_discount_amount"]
+
+            # 할인율, 할인액 기준 필터
+            candidate_items = filtered_items_qs.filter(
+                store_id=store_id,
+                max_discount_rate=max_rate,
+            ).annotate(discount_amount=discount_amount_expr)
+
             if use_cheaper_on_tie:
                 item = (
-                    qs.filter(store_id=store_id, max_discount_rate=max_rate)
+                    candidate_items.order_by(
+                        "-discount_amount",  # 할인액 큰 순
+                        "menu__menu_price",  # 메뉴 가격 낮은 순
+                        "item_id",
+                    )
                     .select_related("store", "menu")
-                    .order_by("menu__menu_price", "item_id")
                     .first()
                 )
             else:
                 item = (
-                    qs.filter(store_id=store_id, max_discount_rate=max_rate)
+                    candidate_items.order_by("-discount_amount", "item_id")
                     .select_related("store", "menu")
                     .first()
                 )
-            if item:
-                filtered_items.append(item)
 
-        results = []
-        for item in filtered_items:
+            if not item:
+                continue
+
             store = item.store
             store_address = getattr(store, "store_address", None)
 
-            # 테스트용 더미 주소 자동 세팅
-            if not user_address:
-                user_address = "서울특별시 중구 세종대로 110"  # 테스트용 사용자 주소 (서울시청 주소임)
-            if not store_address:
-                store_address = "서울특별시 강남구 강남대로 396"  # 테스트용 매장 주소 (강남역 주소임)
-
-            # get_distance_walktime 함수로 실제 거리/도보 시간 계산
+            # 거리, 도보 계산 (기존 로직 유지)
             if user_address and store_address:
                 distance_km, walk_time_min = get_distance_walktime(
                     store_address, user_address
                 )
-                if distance_km is not None and walk_time_min is not None:
-                    distance = int(distance_km * 1000)  # m 단위로 변환
-                    on_foot = int(walk_time_min)
-                else:
-                    distance = 0
-                    on_foot = 0
+                distance = int(distance_km * 1000) if distance_km is not None else 0
+                on_foot = int(walk_time_min) if walk_time_min is not None else 0
             else:
                 distance = 0
                 on_foot = 0
 
-            # 찜 정보
+            # 찜 정보 조회 (기존 로직 유지)
             is_liked, liked_id = False, 0
             like = UserLike.objects.filter(user=user, store=store).first()
             if like:
                 is_liked = True
                 liked_id = like.like_id
 
-            menu = item.menu
             results.append(
                 {
-                    "store_id": store.store_id,
+                    "store_id": store_id,
                     "store_name": store.store_name,
                     "distance": distance,
                     "on_foot": on_foot,
                     "store_image_url": store.store_image_url,
-                    "menu_name": menu.menu_name,
-                    "menu_id": menu.menu_id,
+                    "menu_name": item.menu.menu_name,
+                    "menu_id": item.menu.menu_id,
                     "max_discount_rate": int(item.max_discount_rate * 100),
-                    "max_discount_menu": menu.menu_name,
-                    "max_discount_price_origin": menu.menu_price,
+                    "max_discount_menu": item.menu.menu_name,
+                    "max_discount_price_origin": item.menu.menu_price,
                     "max_discount_price": int(
-                        menu.menu_price * (1 - item.max_discount_rate)
+                        item.menu.menu_price * (1 - item.max_discount_rate)
                     ),
                     "is_liked": is_liked,
                     "liked_id": liked_id,
                 }
             )
 
-        # 거리 오름차순 정렬 (가까운 순으로 보이게)
+        # 거리 오름차순 정렬
         results.sort(key=lambda x: x["distance"])
         return Response(results)
 
@@ -465,13 +499,26 @@ class StoreSpacesDetailView(APIView):
             max_discount_percent = int(max_discount * 100) if max_discount else 0
 
             # 예약 가능 여부 판정
-            is_possible = StoreItem.objects.filter(
+            # 재고가 0인 아이템이 하나라도 있는지 체크
+            has_zero_stock = StoreItem.objects.filter(
                 store=store,
                 space=space,
                 item_reservation_date=target_date,
                 item_reservation_time=target_time,
-                item_stock__gt=0,
+                item_stock=0,
             ).exists()
+
+            if has_zero_stock:
+                is_possible = False
+            else:
+                # 재고 1 이상인 아이템 존재 여부
+                is_possible = StoreItem.objects.filter(
+                    store=store,
+                    space=space,
+                    item_reservation_date=target_date,
+                    item_reservation_time=target_time,
+                    item_stock__gt=0,
+                ).exists()
 
             store_data["spaces"].append(
                 {
@@ -1135,7 +1182,7 @@ class MakeAddress(APIView):
     @swagger_auto_schema(
         operation_summary="User 주소 업데이트",
         operation_description="User 본인의 도로명 주소(user_address)를 업데이트합니다.",
-        responses={200: "주소 수정 완료", 401: "인증이 필요합니다."}
+        responses={200: "주소 수정 완료", 401: "인증이 필요합니다."},
     )
     def patch(self, request):
         stores = Store.objects.all()
@@ -1147,12 +1194,12 @@ class MakeAddress(APIView):
 
             if new_address is None:
                 continue
-            
+
             store.store_address = new_address
-            #store.save()
-            stores_to_update.append(store) # DB 효율 위해 모아놨다가 한번에 업데이트
-        
-        Store.objects.bulk_update(stores_to_update, ['store_address'])
+            # store.save()
+            stores_to_update.append(store)  # DB 효율 위해 모아놨다가 한번에 업데이트
+
+        Store.objects.bulk_update(stores_to_update, ["store_address"])
 
         return Response({"message" : "주소 수정 완료"})
 
