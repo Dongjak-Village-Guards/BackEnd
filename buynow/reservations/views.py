@@ -111,9 +111,9 @@ class ReserveList(APIView):
                 item_datetime = datetime.datetime.combine(
                     item.item_reservation_date, time(hour=item.item_reservation_time)
                 )
-                if item_datetime <= datetime.datetime.now():
+                if timezone.make_aware(item_datetime) <= timezone.now():
                     return Response(
-                        {"error": "이전 시간의 예약은 불가능합니다."}, status=400
+                        {"error": "이미 지난 시간은 예약할 수 없습니다."}, status=400
                     )
 
                 # 재고 확인
@@ -122,7 +122,7 @@ class ReserveList(APIView):
                         {"error": "예약이 불가능한 상품입니다."}, status=400
                     )
 
-                # 슬롯 확인
+                # 슬롯 확인 - 가게측에서 가능한 지
                 store_slot = get_object_or_404(
                     StoreSlot,
                     space=item.space,
@@ -131,6 +131,28 @@ class ReserveList(APIView):
                 )
                 if store_slot.is_reserved:
                     return Response({"error": "이미 예약된 슬롯입니다."}, status=400)
+
+                # 슬롯 확인 - 손님측에서 이전에 이시간에 예약을 했는 지
+                exists = Reservation.objects.filter(
+                    user=user,
+                    reservation_slot__slot_reservation_date=item.item_reservation_date,
+                    reservation_slot__slot_reservation_time=item.item_reservation_time,
+                ).exists()
+
+                if exists:
+                    return Response(
+                        {"error": "동일 시간대에 이미 예약을 한 상태입니다"},
+                        status=400,
+                    )
+                # 위는 쿼리 (성능 우수) 밑은 파이썬으로.
+                """user_reservations = Reservation.objects.filter(user=user)
+                if user_reservations is None:
+                    pass
+                else:
+                    for user_reservation in user_reservations:
+                        reservation_slot = user_reservation.reservation_slot
+                        if reservation_slot.slot_reservation_date == item.item_reservation_date and reservation_slot.slot_reservation_time == item.item_reservation_time:
+                            return Response({"error" : "동일 시간대에 이미 예약을 한 상태입니다"}, status=400)"""
 
                 # 재고 차감
                 item.item_stock -= 1
@@ -244,6 +266,13 @@ class ReserveDetail(APIView):
         # User의 discounted_cost_sum 수정
         user.user_discounted_cost_sum -= reservation.reservation_cost
         user.save()
+
+        # item 
+        item = reservation.store_item
+
+        # 재고 원상복구
+        item.item_stock += 1
+        item.save()
 
         # 예약 삭제
         reservation.delete()
