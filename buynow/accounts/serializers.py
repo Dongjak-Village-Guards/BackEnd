@@ -7,6 +7,7 @@ from django.conf import settings
 import os, json
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
+from django.contrib.auth.hashers import check_password
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -99,23 +100,25 @@ class OwnerLoginSerializer(serializers.Serializer):
     owner_email = serializers.CharField()
     owner_password = serializers.CharField(write_only=True)
 
-    def create(self, attrs):
-        password = make_password(attrs["owner_password"])
-        user, created = User.objects.get_or_create(
-            user_email=attrs["owner_email"],
-            defaults={
-                "user_role": "owner",
-                "password": password,
-                "is_staff": True,
-                "is_superuser": False,
-            },
-        )
+    def validate(self, attrs):
+        email = attrs.get("owner_email")
+        password = attrs.get("owner_password")
+        try :
+            user = User.objects.get(user_email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"detail" : "이메일 또는 비밀번호가 올바르지 않습니다."})
+        
+        if not check_password(password, user.password):
+            raise serializers.ValidationError({"detail" : "이메일 또는 비밀번호가 올바르지 않습니다."})
+
+        if user.user_role != "owner":
+            raise serializers.ValidationError({"detail" : "공급자 계정이 아닙니다."})
+
         access_token, refresh_token = self._generate_tokens(user)
         return {
             "user": user,
             "user_email" : user.user_email,
             "user_role" : "owner",
-            "created": created,
             "access_token": access_token,
             "refresh_token": refresh_token,
         }
