@@ -1377,3 +1377,18 @@ class OwnerSlot(APIView):
             ]
         }
         return Response(response_data)"""
+
+class OwnerStatic(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def get(self, request):
+        store_id = request.data.get("store_id")
+        if not store_id:
+            return Response({"error" : "store_id 가 없습니다."})
+        day = request.data.get("day")
+        if not day:
+            return Response({"error" : "day 가 없습니다."})
+        
+        
+
+        pass
