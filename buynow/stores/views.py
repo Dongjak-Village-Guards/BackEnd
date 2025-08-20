@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField
-from datetime import datetime, timedelta,date
+from datetime import datetime, timedelta, date
 import math
 import requests  # 외부 api 호출용
 import random  # 더미 데이터 랜덤 선택용!
@@ -33,14 +33,12 @@ from logger import get_logger
 logger = get_logger("buynow.stores")
 
 
-
 def view_func(request):
     logger.info("배포 서버에서 호출됨")
     try:
         1 / 0
     except Exception as e:
         logger.error(f"에러 발생: {e}")
-
 
 
 from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
@@ -1197,20 +1195,21 @@ class MakeAddress(APIView):
             if new_address is None:
                 continue
 
-
             store.store_address = new_address
             # store.save()
             stores_to_update.append(store)  # DB 효율 위해 모아놨다가 한번에 업데이트
 
         Store.objects.bulk_update(stores_to_update, ["store_address"])
-            # store.save()
-            stores_to_update.append(store)  # DB 효율 위해 모아놨다가 한번에 업데이트
+        # store.save()
+        stores_to_update.append(store)  # DB 효율 위해 모아놨다가 한번에 업데이트
 
         Store.objects.bulk_update(stores_to_update, ["store_address"])
 
-        return Response({"message" : "주소 수정 완료"})
+        return Response({"message": "주소 수정 완료"})
+
 
 # 공급자 API -----------------------------------------------
+
 
 # 공급자용 가게 등록/조회 하기
 class OwnerStore(APIView):
@@ -1219,55 +1218,68 @@ class OwnerStore(APIView):
     @swagger_auto_schema(
         operation_summary="Owner 자기 Store 등록",
         operation_description="store_owner 에 본인을 등록합니다.",
-        responses={200: "가게 등록 완료", 401: "인증이 필요합니다.", 403: "권한이 없습니다",404 : "해당 store_id 의 store가 존재하지 않음"}
+        responses={
+            200: "가게 등록 완료",
+            401: "인증이 필요합니다.",
+            403: "권한이 없습니다",
+            404: "해당 store_id 의 store가 존재하지 않음",
+        },
     )
-    def post(self,request):
+    def post(self, request):
         user = request.user
-        if not user or not user.is_authenticated :
-            return Response({"error : 인증이 필요합니다."}, status = 401)
-        
-        
-        
+        if not user or not user.is_authenticated:
+            return Response({"error : 인증이 필요합니다."}, status=401)
+
         store_id = request.data.get("store_id")
         if not store_id:
-            return Response ({"error": "store_id가 필요합니다."}, status=400)
+            return Response({"error": "store_id가 필요합니다."}, status=400)
         store = get_object_or_404(Store, store_id=store_id)
 
         store.store_owner = user
         store.save()
 
-        return Response({
-            "message": "가게 등록 성공",
-            "store_id" : store.store_id,
-            "store_name" : store.store_name,
-            "store_category": store.store_category,
-            "store_address": store.store_address,
-            "store_image_url": store.store_image_url,
-            "store_description" : store.store_description
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "message": "가게 등록 성공",
+                "store_id": store.store_id,
+                "store_name": store.store_name,
+                "store_category": store.store_category,
+                "store_address": store.store_address,
+                "store_image_url": store.store_image_url,
+                "store_description": store.store_description,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @swagger_auto_schema(
         operation_summary="Owner 자기 Store 조회",
         operation_description="Owner 본인의 가게 정보를 조회합니다.",
-        responses={200: "가게 조회 완료", 401: "인증이 필요합니다.", 403: "권한이 없습니다", 404 : "해당 owner의 store가 존재하지 않음"}
+        responses={
+            200: "가게 조회 완료",
+            401: "인증이 필요합니다.",
+            403: "권한이 없습니다",
+            404: "해당 owner의 store가 존재하지 않음",
+        },
     )
     def get(self, request):
         user = request.user
-        if not user or not user.is_authenticated :
-            return Response({"error : 인증이 필요합니다."}, status = 401)
-        
-        
+        if not user or not user.is_authenticated:
+            return Response({"error : 인증이 필요합니다."}, status=401)
 
-        store = get_object_or_404(Store, store_owner = user)
+        store = get_object_or_404(Store, store_owner=user)
 
-        return Response({
-            "store_id" : store.store_id,
-            "store_name" : store.store_name,
-            "store_category": store.store_category,
-            "store_address": store.store_address,
-            "store_image_url": store.store_image_url,
-            "store_description" : store.store_description
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "store_id": store.store_id,
+                "store_name": store.store_name,
+                "store_category": store.store_category,
+                "store_address": store.store_address,
+                "store_image_url": store.store_image_url,
+                "store_description": store.store_description,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 """    
 # 공급자용 슬롯 확인하기
