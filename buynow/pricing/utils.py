@@ -18,15 +18,17 @@ def sigmoid(x):
 def record_event_and_update_discount(store_item, sold=1, is_dummy_flag=False):
     now = timezone.now()
 
-    ItemRecord.objects.create(
+    ItemRecord.objects.update_or_create(
         store_item_id=store_item.item_id,
         record_reservation_time=store_item.item_reservation_time,
         time_offset_idx=calculate_time_offset_idx(store_item, now),
-        record_stock=store_item.item_stock,
-        record_item_price=store_item.menu.menu_price,
-        record_discount_rate=store_item.current_discount_rate,
-        created_at=now,
-        is_dummy=is_dummy_flag,  # 호출할 때 플래그로 결정
+        defaults={
+            "record_stock": store_item.item_stock,
+            "record_item_price": store_item.menu.menu_price,
+            "record_discount_rate": store_item.current_discount_rate,
+            "created_at": now,
+            "is_dummy": is_dummy_flag,
+        },
     )
 
     param, _ = MenuPricingParam.objects.get_or_create(menu=store_item.menu)
