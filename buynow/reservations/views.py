@@ -13,6 +13,7 @@ from django.utils import timezone
 import datetime
 from datetime import datetime, timedelta,date, time
 from django.db import transaction
+from config.kakaoapi import get_distance_walktime
 
 # 모델
 from .models import *
@@ -463,6 +464,9 @@ class LikeDetail(APIView):
                 else None
             )
 
+            # 거리 와 도보시간
+            distance, on_foot = get_distance_walktime(store.store_address, user.user_address)
+
             result.append(
                 {
                     "like_id": like.like_id,
@@ -470,8 +474,8 @@ class LikeDetail(APIView):
                     "store_id": store.store_id,
                     "created_at": like.created_at,
                     "store_name": store.store_name,
-                    "distance": 100,  # TODO 실제 거리 계산 로직 필요
-                    "on_foot": 30,  # TODO 실제 도보 시간 계산 로직 필요
+                    "distance": distance,  # TODO 실제 거리 계산 로직 필요
+                    "on_foot": on_foot,  # TODO 실제 도보 시간 계산 로직 필요
                     "store_image_url": store.store_image_url,
                     "menu_name": (
                         max_discount_item.menu.menu_name if max_discount_item else None
