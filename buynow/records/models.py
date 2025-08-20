@@ -12,8 +12,8 @@ class ItemRecord(BaseModel):
         models.PositiveIntegerField()
     )  # 당시 정가(<- 정가가 바뀌지 않는 한 고정)
     record_discount_rate = models.FloatField()  # 당시 할인율
-    created_at = models.DateTimeField(auto_now_add=True)  # 생성 시간
     is_dummy = models.BooleanField(default=False)
+    sold = models.IntegerField(default=1)  # 1: 판매, 0: 미판매
 
     class Meta:
         unique_together = (
