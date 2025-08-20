@@ -13,5 +13,7 @@ class IsUserRole(BasePermission):
         return request.user and request.user.user_role in self.allowed_roles
 
 class IsOwnerRole(BasePermission):
+    allowed_roles = ['admin', 'owner']
     def has_permission(self, request, view):
-        return request.user and request.user.user_role == 'owner'
+        return request.user and request.user.user_role in self.allowed_roles
+

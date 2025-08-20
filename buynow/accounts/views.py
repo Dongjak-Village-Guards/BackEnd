@@ -128,11 +128,11 @@ class OwnerLoginAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="Owner 로그인",
-        operation_description="공급자 로그인/회원가입 후 JWT 토큰 발급",
+        operation_description="공급자 로그인 후 JWT 토큰 발급",
         request_body=OwnerLoginSerializer,
         responses={
             200: openapi.Response(
-                description="공급자 로그인/회원가입 성공",
+                description="공급자 로그인 성공",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
@@ -150,16 +150,17 @@ class OwnerLoginAPIView(APIView):
     def post(self, request):
         serializer = OwnerLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        result = serializer.save()
+        result = serializer.validated_data()
 
         #user = result["user"]
+        user_id = result["user_id"]
         user_email = result["user_email"]
         user_role = result["user_role"]
-        created = result["created"]
-        message = "공급자 회원가입 성공" if created else "공급자 로그인 성공"
+        message = "공급자 로그인 성공"
 
         return Response({
             "message": message,
+            "user_id" : user_id,
             "user_email" : user_email,
             "user_role": user_role,
             "access_token": result["access_token"],

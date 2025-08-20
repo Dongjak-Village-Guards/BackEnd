@@ -11,8 +11,9 @@ from django.utils import timezone
 
 # import datetime, time
 import datetime
-from datetime import time
+from datetime import datetime, timedelta,date, time
 from django.db import transaction
+from config.kakaoapi import get_distance_walktime
 
 # 모델
 from .models import *
@@ -108,7 +109,7 @@ class ReserveList(APIView):
                 )
 
                 # 현재 시간보다 이전 예약이면 예약 불가
-                item_datetime = datetime.datetime.combine(
+                item_datetime = datetime.combine(
                     item.item_reservation_date, time(hour=item.item_reservation_time)
                 )
                 if timezone.make_aware(item_datetime) <= timezone.now():
@@ -247,7 +248,7 @@ class ReserveDetail(APIView):
             return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
 
         # 예약 datetime 생성
-        reservation_datetime = datetime.datetime.combine(
+        reservation_datetime = datetime.combine(
             slot.slot_reservation_date, datetime.time(hour=slot.slot_reservation_time)
         )
         reservation_datetime = timezone.make_aware(reservation_datetime)
@@ -416,7 +417,7 @@ class LikeDetail(APIView):
 
         # 기본 시간: 현재 시간의 정각
         if not time_filter:
-            time_filter = datetime.datetime.now().hour
+            time_filter = datetime.now().hour
         else:
             time_filter = int(time_filter)
 
@@ -442,7 +443,19 @@ class LikeDetail(APIView):
                 store=store, item_reservation_time=time_filter, item_stock__gt=0
             ).select_related("menu")
 
-            is_available = items.exists()
+            # 모든 space의 slot중 time_filter에 해당하는 거 찾고, 그 slot의 is_reserved가 다 true면 is_available은 false
+            today = date.today()
+            is_available = False
+
+            spaces = StoreSpace.objects.filter(
+                store = store
+            )
+            for space in spaces:
+                slot = get_object_or_404(StoreSlot, space = space, slot_reservation_date = today, slot_reservation_time = time_filter)
+                if slot.is_reserved == False :
+                    is_available = True
+                    break
+            
 
             # 최대 할인 메뉴 찾기
             max_discount_item = (
@@ -451,6 +464,9 @@ class LikeDetail(APIView):
                 else None
             )
 
+            # 거리 와 도보시간
+            distance, on_foot = get_distance_walktime(store.store_address, user.user_address)
+
             result.append(
                 {
                     "like_id": like.like_id,
@@ -458,8 +474,8 @@ class LikeDetail(APIView):
                     "store_id": store.store_id,
                     "created_at": like.created_at,
                     "store_name": store.store_name,
-                    "distance": 100,  # TODO 실제 거리 계산 로직 필요
-                    "on_foot": 30,  # TODO 실제 도보 시간 계산 로직 필요
+                    "distance": distance,  # TODO 실제 거리 계산 로직 필요
+                    "on_foot": on_foot,  # TODO 실제 도보 시간 계산 로직 필요
                     "store_image_url": store.store_image_url,
                     "menu_name": (
                         max_discount_item.menu.menu_name if max_discount_item else None
@@ -527,3 +543,223 @@ class LikeDetail(APIView):
         # 좋아요 삭제
         like.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# 공급자 관련 api ------------------------------------
+
+# 공급자용 예약 조회, 예약 취소
+class OwnerReservation(APIView):
+    permission_classes = [IsOwnerRole]
+
+    # 예약 조회
+    def get(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+
+        store_id = request.data.get("store_id")
+        if not store_id:
+            return Response({"error": "store_id가 필요합니다."}, status=400)
+
+        # store_id에 해당하는 모든 space 정보 가져오기
+        try:
+            spaces = StoreSpace.objects.filter(store_id=store_id)
+        except Store.DoesNotExist:
+            return Response({"error": "해당하는 스토어를 찾을 수 없습니다."}, status=404)
+
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        now = datetime.now().hour
+
+        today_spaces_data = []
+        tomorrow_spaces_data = []
+
+        # 슬롯 데이터를 처리하는 헬퍼 함수
+        def process_slots(slot_queryset):
+            slots_data = []
+            for slot in slot_queryset:
+                reservation_info = None
+                is_reserved = False
+
+                # 예약이 있는지 확인
+                try:
+                    reservation = Reservation.objects.get(reservation_slot=slot)
+                    is_reserved = True
+                    
+                    # 예약이 있을 경우, 예약 정보 구성
+                    # reservation.store_item이 ReservationItem 모델에 대한 OneToOne 필드라고 가정
+                    reservation_item = reservation.store_item
+                    
+                    menu_name = None
+                    if reservation_item:
+                        # 메뉴 이름 가져오기.
+                        try:
+                            # reservation_item.menu가 Menu 모델에 대한 OneToOne 필드라고 가정
+                            menu_name = reservation_item.menu.menu_name
+                        except StoreMenu.DoesNotExist:
+                            # 관련 메뉴가 없을 경우
+                            print(f"Warning: Menu not found for item_id {reservation_item.item_id}")
+                            menu_name = None # 또는 "알 수 없는 메뉴"와 같이 설정
+
+                    reservation_info = {
+                        "reservation_id": reservation.reservation_id,
+                        "item_id": reservation_item.item_id if reservation_item else None,
+                        "user_email": reservation.user.user_email,
+                        "menu_name": menu_name
+                    }
+                except Reservation.DoesNotExist:
+                    # 예약이 없으면 수동 마감 상태 확인
+                    is_reserved = slot.is_reserved
+
+                slots_data.append({
+                    "slot_id": slot.slot_id,
+                    "time": slot.slot_reservation_time.strftime("%H:%M"),
+                    "is_reserved": is_reserved,
+                    "reservation_info": reservation_info,
+                })
+            return slots_data
+
+        for space in spaces:
+            # 오늘 슬롯 (현재 시간 이후)
+            today_slots = StoreSlot.objects.filter(
+                space=space,
+                slot_reservation_date=today,
+                slot_reservation_time__gte=now
+            ).order_by('slot_reservation_time')
+            today_slots_data = process_slots(today_slots)
+            
+            today_spaces_data.append({
+                "space_id": space.space_id,
+                "space_name": space.space_name,
+                "space_image_url": space.space_image_url,
+                "slots": today_slots_data
+            })
+
+            # 내일 슬롯
+            tomorrow_slots = StoreSlot.objects.filter(
+                space=space,
+                slot_reservation_date=tomorrow
+            ).order_by('slot_reservation_time')
+            tomorrow_slots_data = process_slots(tomorrow_slots)
+
+            tomorrow_spaces_data.append({
+                "space_id": space.space_id,
+                "space_name": space.space_name,
+                "space_image_url": space.space_image_url,
+                "slots": tomorrow_slots_data
+            })
+        
+        response_data = {
+            "dates": [
+                {
+                    "date": "today",
+                    "spaces": today_spaces_data
+                },
+                {
+                    "date": "tomorrow",
+                    "spaces": tomorrow_spaces_data
+                }
+            ]
+        }
+        return Response(response_data)
+
+    # 예약 취소
+    def delete(self,request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+        
+        slot_id = request.data.get("slot_id")
+        if not slot_id:
+            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        
+        reservation_id = request.data.get("reservation_id")
+        if not reservation_id:
+            return Response({"error" : "reservation_id 가 없습니다."}, status = 400)
+        
+        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        if slot.is_reserved == False: # 예약이 아직 안되어있다는 거니까.
+            return Response({"error" : "is_reserved 가 false 입니다. 잘못된 요청"}, status = 400)
+        
+        # reservation 가져오기
+        reservation = get_object_or_404(
+            Reservation,
+            reservation_slot = slot,
+            reservation_id=reservation_id
+        )
+        
+        with transaction.atomic():
+            # 예약한 user의 discounted_cost_sum 돌려놓기
+            reservation_user = reservation.user
+            reservation_user.user_discounted_cost_sum -= reservation.reservation_cost
+            reservation_user.save()
+
+            item = reservation.store_item
+
+            # item 재고 돌려놓기
+            item.item_stock += 1
+            item.save()
+
+            # reservation delete
+            reservation.delete()
+
+            # slot 상태 변경하기
+            slot.is_reserved = False
+            slot.save()
+
+        return Response({"message" : "예약 취소 성공"}, status=200)
+
+
+
+# 공급자용 make slot closed
+class OwnerClosed(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def patch(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+
+        slot_id = request.data.get("slot_id")
+        if not slot_id:
+            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        # 예약 가능한 (예약 안된) slot을 예약 못하게 하는거니까.
+        if slot.is_reserved == True: # True 면 이미 예약이 되어있으니까 이미 예약 못하는거잖아. 그니까 에러.
+            return Response({"error" : "is_reserved 가 true 입니다. 잘못된 요청"}, status = 400)
+        
+        slot.is_reserved = True
+        slot.save()
+
+        return Response({"message" : f"{slot.slot_id} closed"}, status=status.HTTP_200_OK)
+
+
+# 공급자용 make slot opened
+class OwnerOpen(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def patch(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+
+        slot_id = request.data.get("slot_id")
+        if not slot_id:
+            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        # 수동 마감(예약 안되게끔) 했던 slot을 예약 가능하게 하는거니까.
+        if slot.is_reserved == False:  # false 면 이미 예약해도 되는 거니까 잘못된거지.
+            return Response({"error" : "is_reserved 가 false 입니다. 잘못된 요청"}, status = 400)
+        
+        # 해당 slot을 fk로 가지고 있는 Reservation 데이터가 있는지
+        existing_reservation = Reservation.objects.filter(reservation_slot=slot).exists()
+        if existing_reservation:
+            return Response({"error": "이 슬롯과 연결된 예약이 이미 존재합니다. 잘못된 요청"}, status=400)
+
+        slot.is_reserved = False
+        slot.save()
+
+        return Response({"message" : f"{slot.slot_id} open"}, status=status.HTTP_200_OK)
