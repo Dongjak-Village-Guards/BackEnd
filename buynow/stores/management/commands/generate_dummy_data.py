@@ -539,6 +539,8 @@
 # 실행 시 buynow % python manage.py generate_dummy_data --dev --owners 10 --customers 10 --stores 10 --days 14
 # 숫자는 상황에 맞게 변경 가능 (실행 전 상의 필수!)
 
+from pricing.models import MenuPricingParam
+from records.models import ItemRecord
 from stores.data.dongjak_addresses import dongjak_addresses
 from stores.data.dummy_store_templates import store_templates
 
@@ -604,6 +606,10 @@ class Command(BaseCommand):
 
         # 기존 더미 데이터 삭제 (옵션 미사용시)
         if not options["skip_delete"]:
+            # 모든 ItemRecord 삭제
+            ItemRecord.objects.all().delete()
+            # 모든 MenuPricingParam 삭제
+            MenuPricingParam.objects.all().delete()
             Reservation.objects.filter(is_dummy=True).delete()
             UserLike.objects.filter(is_dummy=True).delete()
             StoreOperatingHour.objects.filter(is_dummy=True).delete()
