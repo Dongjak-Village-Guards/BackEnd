@@ -442,7 +442,19 @@ class LikeDetail(APIView):
                 store=store, item_reservation_time=time_filter, item_stock__gt=0
             ).select_related("menu")
 
-            is_available = items.exists()
+            # 모든 space의 slot중 time_filter에 해당하는 거 찾고, 그 slot의 is_reserved가 다 true면 is_available은 false
+            today = date.today()
+            is_available = False
+
+            spaces = StoreSpace.objects.filter(
+                store = store
+            )
+            for space in spaces:
+                slot = get_object_or_404(StoreSlot, space = space, slot_reservation_date = today, slot_reservation_time = time_filter)
+                if slot.is_reserved == False :
+                    is_available = True
+                    break
+            
 
             # 최대 할인 메뉴 찾기
             max_discount_item = (
@@ -531,7 +543,7 @@ class LikeDetail(APIView):
 
 # 공급자 관련 api ------------------------------------
 
-# 공급자용 예약 취소
+# 공급자용 예약 조회, 예약 취소
 class OwnerReservation(APIView):
     permission_classes = [IsOwnerRole]
 
