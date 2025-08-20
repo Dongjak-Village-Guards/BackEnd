@@ -31,12 +31,14 @@ from logger import get_logger
 
 logger = get_logger("buynow.stores")
 
+
 def view_func(request):
     logger.info("배포 서버에서 호출됨")
     try:
         1 / 0
     except Exception as e:
         logger.error(f"에러 발생: {e}")
+
 
 from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
 
@@ -192,7 +194,7 @@ class StoreListView(APIView):
             if not user_address:
                 user_address = "서울특별시 중구 세종대로 110"  # 테스트용 사용자 주소 (서울시청 주소임)
             if not store_address:
-                store_address = "서울특별시 강남구 강남대로 396"  # 테스트용 매장 주소 (강남역 주소임)
+                store_address = "서울특별시 동작구 장승배기로 94"  # 테스트용 매장 주소 (동작구 도서관 주소임)
 
             # get_distance_walktime 함수로 실제 거리/도보 시간 계산
             if user_address and store_address:
@@ -1134,7 +1136,7 @@ class MakeAddress(APIView):
     @swagger_auto_schema(
         operation_summary="User 주소 업데이트",
         operation_description="User 본인의 도로명 주소(user_address)를 업데이트합니다.",
-        responses={200: "주소 수정 완료", 401: "인증이 필요합니다."}
+        responses={200: "주소 수정 완료", 401: "인증이 필요합니다."},
     )
     def patch(self, request):
         stores = Store.objects.all()
@@ -1146,12 +1148,11 @@ class MakeAddress(APIView):
 
             if new_address is None:
                 continue
-            
-            store.store_address = new_address
-            #store.save()
-            stores_to_update.append(store) # DB 효율 위해 모아놨다가 한번에 업데이트
-        
-        Store.objects.bulk_update(stores_to_update, ['store_address'])
 
-        return Response({"message" : "주소 수정 완료"})
-    
+            store.store_address = new_address
+            # store.save()
+            stores_to_update.append(store)  # DB 효율 위해 모아놨다가 한번에 업데이트
+
+        Store.objects.bulk_update(stores_to_update, ["store_address"])
+
+        return Response({"message": "주소 수정 완료"})
