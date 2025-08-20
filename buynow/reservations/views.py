@@ -109,7 +109,7 @@ class ReserveList(APIView):
                 )
 
                 # 현재 시간보다 이전 예약이면 예약 불가
-                item_datetime = datetime.datetime.combine(
+                item_datetime = datetime.combine(
                     item.item_reservation_date, time(hour=item.item_reservation_time)
                 )
                 if timezone.make_aware(item_datetime) <= timezone.now():
@@ -248,7 +248,7 @@ class ReserveDetail(APIView):
             return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
 
         # 예약 datetime 생성
-        reservation_datetime = datetime.datetime.combine(
+        reservation_datetime = datetime.combine(
             slot.slot_reservation_date, datetime.time(hour=slot.slot_reservation_time)
         )
         reservation_datetime = timezone.make_aware(reservation_datetime)
@@ -417,7 +417,7 @@ class LikeDetail(APIView):
 
         # 기본 시간: 현재 시간의 정각
         if not time_filter:
-            time_filter = datetime.datetime.now().hour
+            time_filter = datetime.now().hour
         else:
             time_filter = int(time_filter)
 
