@@ -8,6 +8,7 @@ from .views import StoreItemDetailView
 
 from .views import view_func
 from .views import MakeAddress
+from .views import OwnerStore
 
 urlpatterns = [
     # 로깅 관련
@@ -40,4 +41,7 @@ urlpatterns = [
 
     # 가짜 주소 관련
     path('cau/', MakeAddress.as_view(), name="change_to_cau"),
+
+    # 공급자 api 관련
+    path('me/owner/', OwnerStore.as_view(), name = "owner_store_join_or_get"),
 ]
