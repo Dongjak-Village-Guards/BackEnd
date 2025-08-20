@@ -63,12 +63,7 @@ DJANGO_APPS = [
     "django.contrib.staticfiles",
 ]
 
-PROJECT_APPS = [
-    "accounts",
-    "stores",
-    "reservations",
-    "records",
-]
+PROJECT_APPS = ["accounts", "stores", "reservations", "records", "pricing"]
 
 THIRD_PARTY_APPS = [
     "corsheaders",

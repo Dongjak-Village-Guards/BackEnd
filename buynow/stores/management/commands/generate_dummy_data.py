@@ -542,6 +542,8 @@
 from stores.data.dongjak_addresses import dongjak_addresses
 from stores.data.dummy_store_templates import store_templates
 
+from pricing.utils import record_event_and_update_discount
+
 from django.core.management.base import BaseCommand, CommandError
 import random
 from datetime import datetime, timedelta
@@ -594,6 +596,9 @@ class Command(BaseCommand):
                 return
 
         faker = Faker("ko_KR")  # 한국어로!
+        start_date = datetime.today().date() - timedelta(
+            days=7
+        )  # 시작일 7일 전부터 생성
         days = options["days"]
         hours = options["hours"]
 
@@ -637,19 +642,19 @@ class Command(BaseCommand):
             )
             for _ in range(options["owners"])
         ]
-        customers = []
-        # customers = [
-        #     User.objects.create_user(
-        #         user_email=faker.unique.email(),
-        #         password="dummy_customer_pw",
-        #         user_image_url=faker.image_url(),
-        #         user_role="customer",
-        #         user_address=safe_pop_address(),
-        #         user_discounted_cost_sum=0,
-        #         is_dummy=True,
-        #     )
-        #     for _ in range(options["customers"])
-        # ]
+        # customers = []
+        customers = [
+            User.objects.create_user(
+                user_email=faker.unique.email(),
+                password="dummy_customer_pw",
+                user_image_url=faker.image_url(),
+                user_role="customer",
+                user_address=safe_pop_address(),
+                user_discounted_cost_sum=0,
+                is_dummy=True,
+            )
+            for _ in range(options["customers"])
+        ]
 
         # --- Store 생성 (점주당 1개 이상 매장 소유) ---
         stores = []
@@ -681,8 +686,8 @@ class Command(BaseCommand):
             # 1. 매장별 전용 메뉴를 먼저 만듭니다.
             menu_objs = []
             for menu_t in template["menus"]:
-                # 메뉴별 de_weight와 max_discount_rate를 각기 다르게 랜덤 할당
-                de_weight = round(random.uniform(0.1, 5.0), 2)
+                # 메뉴별 dp_weight와 max_discount_rate를 각기 다르게 랜덤 할당
+                dp_weight = 0.0  # 기본값은 0.0, 나중에 필요시 조정
                 max_discount = round(random.uniform(0.15, 0.5), 2)  # 15~50%
                 menu = StoreMenu.objects.create(
                     store=store,
@@ -690,7 +695,7 @@ class Command(BaseCommand):
                     menu_image_url=menu_t["image_url"],
                     menu_cost_price=menu_t["cost_price"],
                     menu_price=menu_t["price"],
-                    de_weight=de_weight,
+                    dp_weight=dp_weight,
                     is_dummy=True,
                 )
                 # StoreMenu에는 max_discount_rate 필드가 없으므로,
@@ -721,6 +726,7 @@ class Command(BaseCommand):
 
         # ----- [코드수정 시작: StoreItem current_discount_rate 고정, max_discount_rate 다양화, 재고 비율 ↑] -----
         today = datetime.today().date()
+
         # StoreMenuSpace에 대해 StoreItem 생성
         for sms in StoreMenuSpace.objects.all():
             # 각 StoreMenuSpace의 메뉴에 해당하는 max_discount_rate를 menu_objs에서 찾아서 적용(없으면 0.3)
@@ -749,7 +755,7 @@ class Command(BaseCommand):
 
             # 80% 이상 확률로 재고 1, 나머지 0 -> 그냥 재고 1로 고정
             for day_offset in range(days):
-                date = today + timedelta(days=day_offset)
+                date = start_date + timedelta(days=day_offset)
                 for hour in hours:
                     # stock = 1 if random.random() < 0.85 else 0  # 비율 ↑
                     stock = 1  # 재고 1로 고정
@@ -770,7 +776,7 @@ class Command(BaseCommand):
         # StoreSlot(시간 예약 슬롯) 생성: 각 공간별 날짜/시간 기준 예약 정보 초기화
         for space in StoreSpace.objects.all():
             for day_offset in range(days):
-                date = today + timedelta(days=day_offset)
+                date = start_date + timedelta(days=day_offset)
                 for hour in hours:
                     StoreSlot.objects.create(
                         space=space,
@@ -780,56 +786,61 @@ class Command(BaseCommand):
                         is_dummy=True,
                     )
 
-        # # 예약(Reservation) 객체 생성: 고객들이 랜덤하게 예약/재고 차감/매장 활성여부 갱신 등
-        # items_with_stock = list(StoreItem.objects.filter(item_stock=1))
-        # for customer in customers:
-        #     for _ in range(random.randint(1, 3)):
-        #         if not items_with_stock:
-        #             break
-        #         item = random.choice(items_with_stock)
-        #         slot = StoreSlot.objects.filter(
-        #             space=item.space,
-        #             slot_reservation_date=item.item_reservation_date,
-        #             slot_reservation_time=item.item_reservation_time,
-        #             is_reserved=False,
-        #         ).first()
-        #         if slot:
-        #             discounted_price = round(
-        #                 item.menu.menu_price * (1 - item.current_discount_rate)
-        #             )
-        #             Reservation.objects.create(
-        #                 user=customer,
-        #                 store_item=item,
-        #                 reservation_slot=slot,
-        #                 reservation_cost=discounted_price,
-        #                 is_dummy=True,
-        #             )
-        #             # 고객 할인 금액 추가 누적
-        #             discount_amount = item.menu.menu_price * item.current_discount_rate
-        #             customer.user_discounted_cost_sum += discount_amount
-        #             customer.save()
-        #             # 아이템 재고 차감(0으로)
-        #             item.item_stock = 0
-        #             item.save()
-        #             # 해당 시간슬롯 예약됨으로 처리
-        #             slot.is_reserved = True
-        #             slot.save()
-        #             # 중복예약 방지
-        #             items_with_stock.remove(item)
-        #             # 매장 활성여부 업데이트
-        #             store = item.store
-        #             store.is_active = store.storeitem_set.filter(
-        #                 item_stock__gt=0
-        #             ).exists()
-        #             store.save()
+        # 예약(Reservation) 객체 생성: 고객들이 랜덤하게 예약/재고 차감/매장 활성여부 갱신 등
+        items_with_stock = list(StoreItem.objects.filter(item_stock=1))
+        for customer in customers:
+            for _ in range(random.randint(1, 3)):
+                if not items_with_stock:
+                    break
+                item = random.choice(items_with_stock)
+                slot = StoreSlot.objects.filter(
+                    space=item.space,
+                    slot_reservation_date=item.item_reservation_date,
+                    slot_reservation_time=item.item_reservation_time,
+                    is_reserved=False,
+                ).first()
+                if slot:
+                    discounted_price = round(
+                        item.menu.menu_price * (1 - item.current_discount_rate)
+                    )
+                    Reservation.objects.create(
+                        user=customer,
+                        store_item=item,
+                        reservation_slot=slot,
+                        reservation_cost=discounted_price,
+                        is_dummy=True,
+                    )
+                    record_event_and_update_discount(item, sold=1, is_dummy_flag=True)
+                    # 고객 할인 금액 추가 누적
+                    discount_amount = item.menu.menu_price * item.current_discount_rate
+                    customer.user_discounted_cost_sum += discount_amount
+                    customer.save()
+                    # 아이템 재고 차감(0으로)
+                    item.item_stock = 0
+                    item.save()
+                    # 해당 시간슬롯 예약됨으로 처리
+                    slot.is_reserved = True
+                    slot.save()
+                    # 중복예약 방지
+                    items_with_stock.remove(item)
+                    # 매장 활성여부 업데이트
+                    store = item.store
+                    store.is_active = store.storeitem_set.filter(
+                        item_stock__gt=0
+                    ).exists()
+                    store.save()
+        # 예약 생성 루프 후 남은 재고(예약 없는) 아이템에 대해 미판매 기록 생성
+        for item in StoreItem.objects.filter(item_stock=1, is_dummy=True):
+            # 예약 안 된 아이템
+            record_event_and_update_discount(item, sold=0, is_dummy_flag=True)
 
-        # # 고객 좋아요(UserLike) 랜덤 생성
-        # for customer in customers:
-        #     like_count = random.randint(2, 5)
-        #     if stores:  # [방어] stores가 비어있을 때 예외처리
-        #         liked_stores = random.sample(stores, min(like_count, len(stores)))
-        #         for store in liked_stores:
-        #             UserLike.objects.create(user=customer, store=store, is_dummy=True)
+        # 고객 좋아요(UserLike) 랜덤 생성
+        for customer in customers:
+            like_count = random.randint(2, 5)
+            if stores:  # [방어] stores가 비어있을 때 예외처리
+                liked_stores = random.sample(stores, min(like_count, len(stores)))
+                for store in liked_stores:
+                    UserLike.objects.create(user=customer, store=store, is_dummy=True)
 
         # 매장별 운영시간(StoreOperatingHour) 임의 생성(오픈/마감)
         for store in stores:
@@ -846,7 +857,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                "✅ 더미데이터 생성 완료 (더미 customer 없음 + 예약 생성 안함 + 현재 할인율 10%)"
+                "✅ 더미데이터 생성 완료 (현재 할인율 10%, 가중치/할인 적용)"
             )
         )
 

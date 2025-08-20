@@ -10,6 +10,7 @@ from django.db.models import Max, Q
 from django.utils import timezone
 import datetime, time
 from django.db import transaction
+from pricing.utils import record_event_and_update_discount
 
 # 모델
 from .models import *
@@ -31,12 +32,14 @@ from logger import get_logger
 
 logger = get_logger("buynow.reservations")
 
+
 def view_func(request):
     logger.info("배포 서버에서 호출됨")
     try:
         1 / 0
     except Exception as e:
         logger.error(f"에러 발생: {e}")
+
 
 # Create your views here.
 
@@ -153,6 +156,7 @@ class ReserveList(APIView):
                     reservation_slot=store_slot,
                     reservation_cost=discounted_cost,
                 )
+                record_event_and_update_discount(item, sold=1, is_dummy_flag=False)
 
                 # 유저 할인 총액 갱신
                 user.user_discounted_cost_sum = (
