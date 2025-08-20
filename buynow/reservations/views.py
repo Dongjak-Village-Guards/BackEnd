@@ -569,7 +569,7 @@ class OwnerReservation(APIView):
 
         today = date.today()
         tomorrow = today + timedelta(days=1)
-        now = datetime.now().time()
+        now = datetime.now().hour
 
         today_spaces_data = []
         tomorrow_spaces_data = []
