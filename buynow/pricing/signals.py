@@ -13,4 +13,7 @@ def reservation_created_handler(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=Reservation)
 def reservation_deleted_handler(sender, instance, **kwargs):
+    # 더미데이터 삭제 시 무한 루프 방지를 위해 조건 추가
+    if instance.is_dummy:
+        return
     create_item_record(instance.store_item, sold=0, is_dummy_flag=False)
