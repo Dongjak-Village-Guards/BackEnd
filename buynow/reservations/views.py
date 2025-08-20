@@ -650,16 +650,12 @@ class OwnerReservation(APIView):
             })
         
         response_data = {
-            "dates": [
-                {
-                    "date": "today",
-                    "spaces": today_spaces_data
-                },
-                {
-                    "date": "tomorrow",
-                    "spaces": tomorrow_spaces_data
-                }
-            ]
+            "today" : {
+                "spaces" : today_spaces_data
+            },
+            "tomorrow" : {
+                "spaces" : tomorrow_spaces_data
+            }
         }
         return Response(response_data)
 
