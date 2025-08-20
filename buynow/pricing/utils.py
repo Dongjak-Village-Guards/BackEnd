@@ -4,6 +4,7 @@ from records.models import ItemRecord
 import numpy as np
 from django.utils import timezone
 import math
+from datetime import datetime, time
 
 
 def sigmoid(x):
@@ -80,11 +81,17 @@ def record_event_and_update_discount(store_item, sold=1, is_dummy_flag=False):
 
 
 def calculate_time_offset_idx(store_item, current_time):
-    from datetime import datetime, time
-
+    # naive datetime 생성
     reservation_datetime = datetime.combine(
         store_item.item_reservation_date, time(store_item.item_reservation_time)
     )
+
+    # naive -> aware 변환 (current_time의 tzinfo 사용)
+    if reservation_datetime.tzinfo is None:
+        reservation_datetime = timezone.make_aware(
+            reservation_datetime, timezone=current_time.tzinfo
+        )
+
     diff_minutes = (reservation_datetime - current_time).total_seconds() / 60
     idx = int(max(0, min(18, diff_minutes // 10)))
     return idx
