@@ -11,7 +11,7 @@ from django.utils import timezone
 
 # import datetime, time
 import datetime
-from datetime import time
+from datetime import datetime, timedelta,date, time
 from django.db import transaction
 
 # 모델
@@ -531,10 +531,121 @@ class LikeDetail(APIView):
 
 # 공급자 관련 api ------------------------------------
 
-# 공급자용 예약 조회, 예약 취소
+# 공급자용 예약 취소
 class OwnerReservation(APIView):
     permission_classes = [IsOwnerRole]
+
     # 예약 조회
+    def get(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"error": "인증이 필요합니다."}, status=401)
+
+        store_id = request.data.get("store_id")
+        if not store_id:
+            return Response({"error": "store_id가 필요합니다."}, status=400)
+
+        # store_id에 해당하는 모든 space 정보 가져오기
+        try:
+            spaces = StoreSpace.objects.filter(store_id=store_id)
+        except Store.DoesNotExist:
+            return Response({"error": "해당하는 스토어를 찾을 수 없습니다."}, status=404)
+
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        now = datetime.now().time()
+
+        today_spaces_data = []
+        tomorrow_spaces_data = []
+
+        # 슬롯 데이터를 처리하는 헬퍼 함수
+        def process_slots(slot_queryset):
+            slots_data = []
+            for slot in slot_queryset:
+                reservation_info = None
+                is_reserved = False
+
+                # 예약이 있는지 확인
+                try:
+                    reservation = Reservation.objects.get(reservation_slot=slot)
+                    is_reserved = True
+                    
+                    # 예약이 있을 경우, 예약 정보 구성
+                    # reservation.store_item이 ReservationItem 모델에 대한 OneToOne 필드라고 가정
+                    reservation_item = reservation.store_item
+                    
+                    menu_name = None
+                    if reservation_item:
+                        # 메뉴 이름 가져오기.
+                        try:
+                            # reservation_item.menu가 Menu 모델에 대한 OneToOne 필드라고 가정
+                            menu_name = reservation_item.menu.menu_name
+                        except StoreMenu.DoesNotExist:
+                            # 관련 메뉴가 없을 경우
+                            print(f"Warning: Menu not found for item_id {reservation_item.item_id}")
+                            menu_name = None # 또는 "알 수 없는 메뉴"와 같이 설정
+
+                    reservation_info = {
+                        "reservation_id": reservation.reservation_id,
+                        "item_id": reservation_item.item_id if reservation_item else None,
+                        "user_email": reservation.user.user_email,
+                        "menu_name": menu_name
+                    }
+                except Reservation.DoesNotExist:
+                    # 예약이 없으면 수동 마감 상태 확인
+                    is_reserved = slot.is_reserved
+
+                slots_data.append({
+                    "slot_id": slot.slot_id,
+                    "time": slot.slot_reservation_time.strftime("%H:%M"),
+                    "is_reserved": is_reserved,
+                    "reservation_info": reservation_info,
+                })
+            return slots_data
+
+        for space in spaces:
+            # 오늘 슬롯 (현재 시간 이후)
+            today_slots = StoreSlot.objects.filter(
+                space=space,
+                slot_reservation_date=today,
+                slot_reservation_time__gte=now
+            ).order_by('slot_reservation_time')
+            today_slots_data = process_slots(today_slots)
+            
+            today_spaces_data.append({
+                "space_id": space.space_id,
+                "space_name": space.space_name,
+                "space_image_url": space.space_image_url,
+                "slots": today_slots_data
+            })
+
+            # 내일 슬롯
+            tomorrow_slots = StoreSlot.objects.filter(
+                space=space,
+                slot_reservation_date=tomorrow
+            ).order_by('slot_reservation_time')
+            tomorrow_slots_data = process_slots(tomorrow_slots)
+
+            tomorrow_spaces_data.append({
+                "space_id": space.space_id,
+                "space_name": space.space_name,
+                "space_image_url": space.space_image_url,
+                "slots": tomorrow_slots_data
+            })
+        
+        response_data = {
+            "dates": [
+                {
+                    "date": "today",
+                    "spaces": today_spaces_data
+                },
+                {
+                    "date": "tomorrow",
+                    "spaces": tomorrow_spaces_data
+                }
+            ]
+        }
+        return Response(response_data)
 
     # 예약 취소
     def delete(self,request):

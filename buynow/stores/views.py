@@ -1261,7 +1261,8 @@ class OwnerStore(APIView):
             "store_image_url": store.store_image_url,
             "store_description" : store.store_description
         }, status=status.HTTP_200_OK)
-    
+
+"""    
 # 공급자용 슬롯 확인하기
 class OwnerSlot(APIView):
     permission_classes = [IsOwnerRole]
@@ -1375,4 +1376,4 @@ class OwnerSlot(APIView):
                 }
             ]
         }
-        return Response(response_data)
+        return Response(response_data)"""
