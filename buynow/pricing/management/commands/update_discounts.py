@@ -55,6 +55,9 @@ class Command(BaseCommand):
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
+                self.stdout.write(
+                    f"item_id={store_item.item_id}, time_offset_idx={t}"
+                )  # 시간 인덱스 로그 출력
                 cost = menu.menu_cost_price
 
                 max_discount = store_item.max_discount_rate or 0.3

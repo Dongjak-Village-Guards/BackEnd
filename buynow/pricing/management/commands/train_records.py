@@ -102,6 +102,8 @@ class Command(BaseCommand):
             record_ids = [r.record_id for r in records]
             ItemRecord.objects.filter(record_id__in=record_ids).update(is_learned=True)
 
-            self.stdout.write(f"{menu.menu_name}: 파라미터 학습 완료")
+            self.stdout.write(
+                f"{menu.menu_name} 학습 완료 - beta0(a): {a:.4f}, alpha(b): {b:.4f}, gamma_tilde: {param.gamma_tilde:.4f}, dp_weight(w): {w:.4f}"
+            )
 
         self.stdout.write("할인율 파라미터 학습 종료.")
