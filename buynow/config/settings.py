@@ -63,12 +63,7 @@ DJANGO_APPS = [
     "django.contrib.staticfiles",
 ]
 
-PROJECT_APPS = [
-    "accounts",
-    "stores",
-    "reservations",
-    "records",
-]
+PROJECT_APPS = ["accounts", "stores", "reservations", "records", "pricing"]
 
 THIRD_PARTY_APPS = [
     "corsheaders",
@@ -169,8 +164,6 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "ko-kr"
 
 TIME_ZONE = "Asia/Seoul"
-USE_TZ = False  # (기존 USE_TZ = True일 수도 있음)
-
 
 USE_I18N = True
 
