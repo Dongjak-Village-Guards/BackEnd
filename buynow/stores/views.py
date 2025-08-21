@@ -1471,7 +1471,7 @@ class OwnerStatic(APIView):
         # 8. 성장률(delta) 계산
         def calculate_delta(current, past):
             if past == 0:
-                return "inf" if current > 0 else 0
+                return "-" if current > 0 else 0
             return (current - past) / past * 100
 
         revenue_delta = calculate_delta(current_total_revenue, past_total_revenue)
@@ -1487,11 +1487,11 @@ class OwnerStatic(APIView):
         response_data = {
             "total_revenue": {
                 "value": current_total_revenue,
-                "delta": round(revenue_delta, 2)
+                "delta": round(revenue_delta, 2) if isinstance(revenue_delta, (int, float)) else revenue_delta
             },
             "total_reservations_count": {
                 "value": current_total_reservations_count,
-                "delta": round(reservations_delta, 2)
+                "delta": round(reservations_delta, 2) if isinstance(reservations_delta, (int, float)) else reservations_delta
             },
             "total_discount_amount": {
                 "value": current_total_discount_amount
