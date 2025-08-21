@@ -251,7 +251,7 @@ class ReserveDetail(APIView):
 
         # 예약 datetime 생성
         reservation_datetime = datetime.combine(
-            slot.slot_reservation_date, datetime.time(hour=slot.slot_reservation_time)
+            slot.slot_reservation_date, time(hour=slot.slot_reservation_time)
         )
         reservation_datetime = timezone.make_aware(reservation_datetime)
         now = timezone.now()
