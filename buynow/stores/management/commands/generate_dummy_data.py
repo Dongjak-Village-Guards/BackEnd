@@ -1186,7 +1186,11 @@ from stores.models import (
 from accounts.models import User
 from stores.data.dongjak_addresses import dongjak_addresses
 from stores.data.dummy_store_templates import store_templates
-from pricing.utils import calculate_time_offset_idx, create_item_record
+from pricing.utils import (
+    calculate_time_offset_idx,
+    create_item_record,
+    safe_create_item_record,
+)
 from datetime import datetime, timedelta, timezone
 import random
 from faker import Faker
@@ -1217,10 +1221,10 @@ class Command(BaseCommand):
 
     def _batch_delete(self, queryset, batch_size=50):
         while True:
-            batch = queryset[:batch_size]
-            if not batch.exists():
+            ids = list(queryset.values_list("pk", flat=True)[:batch_size])
+            if not ids:
                 break
-            batch.delete()
+            queryset.model.objects.filter(pk__in=ids).delete()
 
     def handle(self, *args, **options):
         if not options["dev"] and not options["prod"]:
@@ -1297,6 +1301,10 @@ class Command(BaseCommand):
             )
         )
 
+        # (중요!) DB에서 owners, customers를 다시 가져와야 함 (PK가 할당된 상태로)
+        owners = list(User.objects.filter(user_role="owner", is_dummy=True))
+        customers = list(User.objects.filter(user_role="customer", is_dummy=True))
+
         # --- Store 생성 ---
         stores = []
         store_template_pairs = []
@@ -1326,63 +1334,84 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.NOTICE(f"Stores 생성 완료: {len(stores)}개 매장 생성")
         )
+        # Store fresh 쿼리
+        stores = list(Store.objects.filter(is_dummy=True))
+        # 매핑: store_name → Store 객체
+        store_name_to_store = {store.store_name: store for store in stores}
+        # 매핑: store_name → template 딕셔너리 생성
+        store_name_to_template = {s.store_name: t for s, t in store_template_pairs}
 
-        # --- StoreMenu, StoreSpace, StoreMenuSpace 생성 ---
         store_menus = []
         store_spaces = []
         store_menu_spaces = []
 
-        for store, template in store_template_pairs:
+        # StoreMenu, StoreSpace 생성: fresh Store 기준 & store_name으로 template 찾기
+        for store_name, fresh_store in store_name_to_store.items():
+            template = store_name_to_template.get(store_name)
+            if not template:
+                continue  # template 없으면 건너뜀
+
             for menu_t in template["menus"]:
-                menu_obj = StoreMenu(
-                    store=store,
-                    menu_name=menu_t["menu_name"],
-                    menu_image_url=menu_t["image_url"],
-                    menu_cost_price=menu_t["cost_price"],
-                    menu_price=menu_t["price"],
-                    dp_weight=0.0,
-                    is_dummy=True,
+                store_menus.append(
+                    StoreMenu(
+                        store=fresh_store,
+                        menu_name=menu_t["menu_name"],
+                        menu_image_url=menu_t["image_url"],
+                        menu_cost_price=menu_t["cost_price"],
+                        menu_price=menu_t["price"],
+                        dp_weight=0.0,
+                        is_dummy=True,
+                    )
                 )
-                store_menus.append(menu_obj)
 
             for space_t in template["spaces"]:
-                space = StoreSpace(
-                    store=store,
-                    space_name=space_t["space_name"],
-                    space_image_url=space_t["image_url"],
-                    space_description=space_t["description"],
-                    is_dummy=True,
+                store_spaces.append(
+                    StoreSpace(
+                        store=fresh_store,
+                        space_name=space_t["space_name"],
+                        space_image_url=space_t["image_url"],
+                        space_description=space_t["description"],
+                        is_dummy=True,
+                    )
                 )
-                store_spaces.append(space)
 
         batch_create(StoreMenu, store_menus, batch_size)
         batch_create(StoreSpace, store_spaces, batch_size)
 
-        # StoreMenuSpace는 StoreMenu, StoreSpace가 저장된 후에 생성해야 하므로 DB에서 참조
-        store_menu_map = {}
-        for menu in StoreMenu.objects.filter(
-            store__in=[st[0] for st in store_template_pairs]
-        ):
-            key = (menu.store_id, menu.menu_name)
-            store_menu_map[key] = menu
+        # fresh 쿼리 후 store_menu_map, store_space_map 생성
+        store_menus = list(StoreMenu.objects.filter(store__in=stores))
+        store_spaces = list(StoreSpace.objects.filter(store__in=stores))
+        store_menu_map = {(m.store_id, m.menu_name): m for m in store_menus}
+        store_space_map = {(s.store_id, s.space_name): s for s in store_spaces}
 
-        store_space_map = {}
-        for space in StoreSpace.objects.filter(
-            store__in=[st[0] for st in store_template_pairs]
-        ):
-            key = (space.store_id, space.space_name)
-            store_space_map[key] = space
+        self.stdout.write(f"store_template_pairs 개수: {len(store_template_pairs)}")
+        self.stdout.write(f"store_spaces 개수: {len(store_spaces)}")
+        self.stdout.write(f"store_menu_map 개수: {len(store_menu_map)}")
 
-        for store, template in store_template_pairs:
-            space_objs = [space for space in store_spaces if space.store == store]
+        # StoreMenuSpace 생성
+        for store_name, fresh_store in store_name_to_store.items():
+            template = store_name_to_template.get(store_name)
+            if not template:
+                continue
+
+            space_objs = [
+                space
+                for space in store_spaces
+                if space.store_id == fresh_store.store_id
+            ]
+            self.stdout.write(f"{fresh_store.store_name} - 공간개수: {len(space_objs)}")
+
             for space in space_objs:
                 menu_names = [m["menu_name"] for m in template["menus"]]
-                # 메뉴 이름 기준 추출
                 menus_for_space = [
-                    store_menu_map.get((store.id, mn))
+                    store_menu_map.get((fresh_store.store_id, mn))
                     for mn in menu_names
-                    if store_menu_map.get((store.id, mn))
+                    if store_menu_map.get((fresh_store.store_id, mn))
                 ]
+                self.stdout.write(
+                    f"공간 {space.space_name} - 연관 메뉴개수: {len(menus_for_space)}"
+                )
+
                 for menu in random.sample(
                     menus_for_space,
                     min(len(menus_for_space), random.randint(1, len(menus_for_space))),
@@ -1391,11 +1420,109 @@ class Command(BaseCommand):
                         StoreMenuSpace(menu=menu, space=space, is_dummy=True)
                     )
 
+        self.stdout.write(f"store_menu_spaces 개수: {len(store_menu_spaces)}")
         batch_create(StoreMenuSpace, store_menu_spaces, batch_size)
 
         self.stdout.write(
             self.style.NOTICE("StoreMenu, StoreSpace, StoreMenuSpace 생성 완료")
         )
+
+        # self.stdout.write(
+        #     self.style.NOTICE(f"Stores 생성 완료: {len(stores)}개 매장 생성")
+        # )
+        # # [추가] Store fresh!
+        # stores = list(Store.objects.filter(is_dummy=True))
+        # # store_name → store 객체 매핑
+        # store_name_to_store = {store.store_name: store for store in stores}
+
+        # # --- StoreMenu, StoreSpace, StoreMenuSpace 생성 ---
+        # store_menus = []
+        # store_spaces = []
+        # store_menu_spaces = []
+
+        # for fresh_store in stores:
+        #     template = next(
+        #         t
+        #         for s, t in store_template_pairs
+        #         if s.store_name == fresh_store.store_name
+        #     )
+
+        #     for menu_t in template["menus"]:
+        #         store_menus.append(
+        #             StoreMenu(
+        #                 store=fresh_store,
+        #                 menu_name=menu_t["menu_name"],
+        #                 menu_image_url=menu_t["image_url"],
+        #                 menu_cost_price=menu_t["cost_price"],
+        #                 menu_price=menu_t["price"],
+        #                 dp_weight=0.0,
+        #                 is_dummy=True,
+        #             )
+        #         )
+
+        #     for space_t in template["spaces"]:
+        #         store_spaces.append(
+        #             StoreSpace(
+        #                 store=fresh_store,
+        #                 space_name=space_t["space_name"],
+        #                 space_image_url=space_t["image_url"],
+        #                 space_description=space_t["description"],
+        #                 is_dummy=True,
+        #             )
+        #         )
+
+        # batch_create(StoreMenu, store_menus, batch_size)
+        # batch_create(StoreSpace, store_spaces, batch_size)
+
+        # # StoreMenu, StoreSpace는 batch_create 바로 후 fresh하게 다시 쿼리해서 리스트 생성
+        # store_menus = list(StoreMenu.objects.filter(store__in=stores))
+        # store_spaces = list(StoreSpace.objects.filter(store__in=stores))
+
+        # # 그리고 매핑 생성 (위 수정된 내용)
+        # store_menu_map = {}
+        # for menu in store_menus:
+        #     key = (menu.store_id, menu.menu_name)
+        #     store_menu_map[key] = menu
+
+        # store_space_map = {}
+        # for space in store_spaces:
+        #     key = (space.store_id, space.space_name)
+        #     store_space_map[key] = space
+
+        # self.stdout.write(f"store_template_pairs 개수: {len(store_template_pairs)}")
+        # self.stdout.write(f"store_spaces 개수: {len(store_spaces)}")
+        # self.stdout.write(f"store_menu_map 개수: {len(store_menu_map)}")
+
+        # for store, template in store_template_pairs:
+        #     space_objs = [
+        #         space for space in store_spaces if space.store_id == store.store_id
+        #     ]
+        #     self.stdout.write(f"{store.store_name} - 공간개수: {len(space_objs)}")
+        #     for space in space_objs:
+        #         menu_names = [m["menu_name"] for m in template["menus"]]
+        #         # 메뉴 이름 기준 추출
+        #         menus_for_space = [
+        #             store_menu_map.get((store.id, mn))
+        #             for mn in menu_names
+        #             if store_menu_map.get((store.id, mn))
+        #         ]
+        #         self.stdout.write(
+        #             f"공간 {space.space_name} - 연관 메뉴개수: {len(menus_for_space)}"
+        #         )
+        #         for menu in random.sample(
+        #             menus_for_space,
+        #             min(len(menus_for_space), random.randint(1, len(menus_for_space))),
+        #         ):
+        #             store_menu_spaces.append(
+        #                 StoreMenuSpace(menu=menu, space=space, is_dummy=True)
+        #             )
+
+        # self.stdout.write(f"store_menu_spaces 개수: {len(store_menu_spaces)}")
+        # batch_create(StoreMenuSpace, store_menu_spaces, batch_size)
+
+        # self.stdout.write(
+        #     self.style.NOTICE("StoreMenu, StoreSpace, StoreMenuSpace 생성 완료")
+        # )
 
         # --- StoreItem 생성 배치 처리 ---
         records_to_create = []
@@ -1415,7 +1542,7 @@ class Command(BaseCommand):
             for day_offset in range(days):
                 date = start_date + timedelta(days=day_offset)
                 for hour in hours:
-                    stock = 1 if random.random() < 0.8 else 0
+                    stock = 1 if random.random() < 0.7 else 0
                     record = StoreItem(
                         menu=menu,
                         space=sms.space,
@@ -1482,7 +1609,18 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE("StoreSlot 생성 완료"))
 
         # --- 예약 생성 ---
-        items_with_stock = list(StoreItem.objects.filter(item_stock=1))
+        # items_with_stock = list(StoreItem.objects.filter(item_stock=1))
+        today = date.today()
+        dummy_start_date = today - timedelta(days=6)
+        dummy_end_date = today - timedelta(days=1)
+
+        items_with_stock = list(
+            StoreItem.objects.filter(
+                item_stock=1,
+                item_reservation_date__gte=dummy_start_date,
+                item_reservation_date__lte=dummy_end_date,
+            )
+        )
         random.shuffle(items_with_stock)
 
         for idx, customer in enumerate(customers):
@@ -1510,7 +1648,9 @@ class Command(BaseCommand):
                         reservation_cost=discounted_price,
                         is_dummy=True,
                     )
-                    create_item_record(item, sold=1, is_dummy_flag=True)
+
+                    safe_create_item_record(item, sold=1, is_dummy_flag=True)
+
                     discount_amount = item.menu.menu_price * item.current_discount_rate
                     customer.user_discounted_cost_sum += discount_amount
                     customer.save()
@@ -1535,18 +1675,18 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE("예약 생성 완료"))
 
         # --- 미판매 재고에 대한 기록 ---
+        count = 0
         for item in StoreItem.objects.filter(item_stock=1, is_dummy=True):
-            exists = ItemRecord.objects.filter(
-                store_item_id=item.item_id,
-                record_reservation_time=item.item_reservation_time,
-                time_offset_idx=calculate_time_offset_idx(item, timezone.now()),
-                sold=0,
-                is_dummy=True,
-            ).exists()
-            if not exists:
-                create_item_record(item, sold=0, is_dummy_flag=True)
+            safe_create_item_record(item, sold=0, is_dummy_flag=True)
+            count += 1
+            if count % 100 == 0:
+                self.stdout.write(
+                    self.style.NOTICE(f"미판매 재고 기록 생성 진행: {count}개 완료")
+                )
 
-        self.stdout.write(self.style.NOTICE("미판매 재고 기록 생성 완료"))
+        self.stdout.write(
+            self.style.NOTICE(f"미판매 재고 기록 생성 완료, 총 {count}개")
+        )
 
         # --- UserLike 생성 ---
         records_to_create = []

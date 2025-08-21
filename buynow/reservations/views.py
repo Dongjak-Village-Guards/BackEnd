@@ -14,7 +14,7 @@ import datetime
 from datetime import datetime, timedelta, date, time
 from django.db import transaction
 from config.kakaoapi import get_distance_walktime
-from pricing.utils import create_item_record
+from pricing.utils import create_item_record, safe_create_item_record
 
 # 모델
 from .models import *
@@ -182,7 +182,7 @@ class ReserveList(APIView):
                     reservation_slot=store_slot,
                     reservation_cost=discounted_cost,
                 )
-                create_item_record(item, sold=1, is_dummy_flag=False)
+                safe_create_item_record(item, sold=1, is_dummy_flag=False)
 
                 # 유저 할인 총액 갱신
                 user.user_discounted_cost_sum = (

@@ -29,6 +29,38 @@ def create_item_record(store_item, sold=1, is_dummy_flag=False):
     )
 
 
+# def safe_create_item_record(item, sold, is_dummy_flag):
+#     time_offset = calculate_time_offset_idx(item, timezone.now())
+#     exists = ItemRecord.objects.filter(
+#         store_item_id=item.item_id,
+#         record_reservation_time=item.item_reservation_time,
+#         time_offset_idx=time_offset,
+#         sold=sold,
+#         is_dummy=is_dummy_flag,
+#     ).exists()
+#     if not exists:
+#         create_item_record(item, sold=sold, is_dummy_flag=is_dummy_flag)
+
+from django.db import transaction, IntegrityError
+
+
+def safe_create_item_record(item, sold, is_dummy_flag):
+    time_offset = calculate_time_offset_idx(item, timezone.now())
+    try:
+        with transaction.atomic():
+            if not ItemRecord.objects.filter(
+                store_item_id=item.item_id,
+                record_reservation_time=item.item_reservation_time,
+                time_offset_idx=time_offset,
+                sold=sold,
+                is_dummy=is_dummy_flag,
+            ).exists():
+                create_item_record(item, sold=sold, is_dummy_flag=is_dummy_flag)
+    except IntegrityError:
+        # 중복 삽입 시 무시(로깅 가능)
+        pass
+
+
 def update_discount_param(store_item, sold=1):
     param, _ = MenuPricingParam.objects.get_or_create(menu=store_item.menu)
 

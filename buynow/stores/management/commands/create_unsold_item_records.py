@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from stores.models import StoreItem
-from pricing.utils import create_item_record
+from pricing.utils import create_item_record, safe_create_item_record
 from django.utils import timezone
 from datetime import datetime, time
 
@@ -19,8 +19,7 @@ class Command(BaseCommand):
 
         count = 0
         for item in unsold_items:
-            exists = item_exists = False
-            exists = create_item_record(item, sold=0, is_dummy_flag=False)
+            safe_create_item_record(item, sold=0, is_dummy_flag=False)
             count += 1
 
         self.stdout.write(self.style.SUCCESS(f"미판매 ItemRecord {count}건 생성 완료"))
