@@ -109,6 +109,3 @@ class StoreSlot(BaseModel):
 
     class Meta:
         unique_together = ("space", "slot_reservation_date", "slot_reservation_time")
-
-
-# TODO 검토필요
