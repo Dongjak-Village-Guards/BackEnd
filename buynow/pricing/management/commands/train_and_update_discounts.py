@@ -44,14 +44,14 @@ class Command(BaseCommand):
                 self.stdout.write(f"{menu.menu_name}: 신규 학습 데이터 없음, 건너뜀")
                 continue
 
-            record_count = queryset[:100].count()
-            if record_count < 100:
+            record_count = queryset[:50].count()
+            if record_count < 50:
                 self.stdout.write(
                     f"{menu.menu_name}: 학습 데이터 부족 (신규 {record_count}건)"
                 )
 
-            # 실제 학습용 데이터 쿼리 (최대 100개)
-            records = queryset.order_by("-created_at")[:100]
+            # 실제 학습용 데이터 쿼리 (최대 50개) -> 이후 10건으로 줄일 예정.
+            records = queryset.order_by("-created_at")[:50]
 
             store_items = StoreItem.objects.filter(
                 item_id__in=[r.store_item_id for r in records]
