@@ -1,3 +1,4 @@
+from datetime import datetime
 import math
 from django.core.management.base import BaseCommand
 from stores.models import StoreMenu, StoreItem
@@ -109,10 +110,14 @@ class Command(BaseCommand):
                     best_price = price_candidate
 
             discount = max(0.0, min(1 - best_price / menu.menu_price, max_discount))
-
-            menu.storeitem_set.filter(item_stock=1).update(
+            today = datetime.today().date()
+            # menu.storeitem_set.filter(item_stock=1).update(
+            #     current_discount_rate=discount
+            # )
+            menu.storeitem_set.filter(item_stock=1, item_reservation_date=today).update(
                 current_discount_rate=discount
             )
+
             self.stdout.write(
                 f"{menu.menu_name}: 최적 가격 {best_price}원, 할인율 {discount:.4f}"
             )
