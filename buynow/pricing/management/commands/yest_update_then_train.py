@@ -49,5 +49,5 @@ class Command(BaseCommand):
         self.stdout.write(f"생성된 신규 ItemRecord 총 {created_count}건")
 
         self.stdout.write("할인율 학습 시작...")
-        call_command("train_and_update_discounts")
+        call_command("train_records")
         self.stdout.write("어제의 미판매 건에 대한 업데이트 및 학습 완료.")
