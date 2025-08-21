@@ -90,7 +90,7 @@ class Command(BaseCommand):
             menu.save(update_fields=["dp_weight"])
             # [수정] 학습 후 해당 레코드들을 is_learned=True로 업데이트
             record_ids = [r.record_id for r in records]
-            ItemRecord.objects.filter(id__in=record_ids).update(is_learned=True)
+            ItemRecord.objects.filter(record_id__in=record_ids).update(is_learned=True)
 
             max_discount = menu.storeitem_set.first().max_discount_rate or 0.3
             p_min = int(menu.menu_price * (1 - max_discount))
