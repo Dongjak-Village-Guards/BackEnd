@@ -10,7 +10,7 @@ from pricing.utils import sigmoid, calculate_time_offset_idx
 class Command(BaseCommand):
     help = "StoreItem별 현재 할인율 시간별로 업데이트"
 
-    price_grid_interval = 100
+    price_grid_interval = 10
 
     def gamma_tilde_to_gamma(self, gamma_tilde):
         return -math.log(math.exp(gamma_tilde) + 1)
@@ -78,11 +78,20 @@ class Command(BaseCommand):
                     z = a + b * p_n + gamma * t + w
                     p = sigmoid(z)
                     profit = p * price_candidate - cost
+
+                    self.stdout.write(
+                        f"item_id={store_item.item_id}, time_offset_idx={t}, price_candidate={price_candidate}, profit={profit:.2f}"
+                    )
+
                     if profit > best_profit:
                         best_profit = profit
                         best_price = price_candidate
 
                 discount = max(0.0, min(1 - best_price / menu.menu_price, max_discount))
+
+                self.stdout.write(
+                    f"item_id={store_item.item_id}, time_offset_idx={t}, best_price={best_price}, discount={discount:.4f}"
+                )
 
                 store_item.current_discount_rate = discount
                 store_item.save(update_fields=["current_discount_rate"])
