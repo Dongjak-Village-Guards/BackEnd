@@ -41,6 +41,7 @@ class StoreMenu(BaseModel):
     menu_image_url = models.TextField(blank=True)  # TODO url...
     menu_cost_price = models.PositiveIntegerField()  # 원가
     menu_price = models.PositiveIntegerField()  # 정가
+    dp_weight = models.FloatField(default=0.0)  # 가중치
     is_dummy = models.BooleanField(default=False)
 
 
