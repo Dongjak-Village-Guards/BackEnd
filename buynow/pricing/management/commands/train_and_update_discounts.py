@@ -35,18 +35,32 @@ class Command(BaseCommand):
             w = menu.dp_weight  # 메뉴 가중치
 
             item_ids = menu.storeitem_set.values_list("item_id", flat=True)
-            records = ItemRecord.objects.filter(store_item_id__in=item_ids).order_by(
-                "-created_at"
-            )[:100]
-            if not records.exists():
-                self.stdout.write(f"{menu.menu_name}: 학습 데이터 부족, 건너뜀")
+
+            queryset = ItemRecord.objects.filter(
+                store_item_id__in=item_ids, is_learned=False
+            )
+
+            if not queryset.exists():
+                self.stdout.write(f"{menu.menu_name}: 신규 학습 데이터 없음, 건너뜀")
                 continue
+
+            record_count = queryset[:100].count()
+            if record_count < 100:
+                self.stdout.write(
+                    f"{menu.menu_name}: 학습 데이터 부족 (신규 {record_count}건)"
+                )
+
+            # 실제 학습용 데이터 쿼리 (최대 100개)
+            records = queryset.order_by("-created_at")[:100]
+
+            store_items = StoreItem.objects.filter(
+                item_id__in=[r.store_item_id for r in records]
+            )
+            store_item_map = {item.item_id: item for item in store_items}
 
             for _ in range(self.epochs):
                 for r in records:
-                    store_item = StoreItem.objects.filter(
-                        item_id=r.store_item_id
-                    ).first()
+                    store_item = store_item_map.get(r.store_item_id)
                     if not store_item:
                         continue
 
@@ -74,6 +88,9 @@ class Command(BaseCommand):
 
             menu.dp_weight = w
             menu.save(update_fields=["dp_weight"])
+            # [수정] 학습 후 해당 레코드들을 is_learned=True로 업데이트
+            record_ids = [r.id for r in records]
+            ItemRecord.objects.filter(id__in=record_ids).update(is_learned=True)
 
             max_discount = menu.storeitem_set.first().max_discount_rate or 0.3
             p_min = int(menu.menu_price * (1 - max_discount))

@@ -33,6 +33,7 @@ def create_item_record(store_item, sold=1, is_dummy_flag=False):
         created_at=now,
         is_dummy=is_dummy_flag,
         sold=sold,  # sold 정보 명시적으로 저장 (DB 필드 존재해야 함)
+        is_learned=False,  # 신규 생성 시 학습 미완료 상태로 기본 설정
     )
 
 

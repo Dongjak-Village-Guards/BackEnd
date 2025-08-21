@@ -14,6 +14,7 @@ class ItemRecord(BaseModel):
     record_discount_rate = models.FloatField()  # 당시 할인율
     is_dummy = models.BooleanField(default=False)
     sold = models.IntegerField(default=1)  # 1: 판매, 0: 미판매
+    is_learned = models.BooleanField(default=False)  # 신규 필드 추가
 
     class Meta:
         unique_together = (
