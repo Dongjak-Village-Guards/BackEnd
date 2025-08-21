@@ -625,7 +625,7 @@ class OwnerReservation(APIView):
                 slots_data.append(
                     {
                         "slot_id": slot.slot_id,
-                        "time": slot.slot_reservation_time.strftime("%H:%M"),
+                        "time": time(slot.slot_reservation_time).strftime("%H:%M"),
                         "is_reserved": is_reserved,
                         "reservation_info": reservation_info,
                     }
