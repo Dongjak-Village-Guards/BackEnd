@@ -559,14 +559,12 @@ class OwnerReservation(APIView):
     permission_classes = [IsOwnerRole]
 
     # 예약 조회
-    def get(self, request):
+    def get(self, request, store_id):
         user = request.user
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        store_id = request.data.get("store_id")
-        if not store_id:
-            return Response({"error": "store_id가 필요합니다."}, status=400)
+        
 
         # store_id에 해당하는 모든 space 정보 가져오기
         try:

@@ -16,6 +16,6 @@ urlpatterns = [
     # 공급자 api 관련
     path('<int:slot_id>/sold_out/', OwnerClosed.as_view(), name = 'make_slot_closed'),
     path('<int:slot_id>/restock/', OwnerOpen.as_view(), name = 'make_slot_open'),
-    path('me/owner/', OwnerReservation.as_view(), name = 'get_reservation'),
+    path('me/owner/<int:store_id>/', OwnerReservation.as_view(), name = 'get_reservation'),
     path('<int:slot_id>/<int:reservation_id>/cancel/', OwnerReservationDetail.as_view(), name = "delete_reservation"),
 ]
