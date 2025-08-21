@@ -703,9 +703,10 @@ class StoreSpaceDetailView(APIView):
 
             # 메뉴별 StoreItem 여러개 모두 처리
             for item in store_items:
+                # 수정 - current_discount_rate 사용
                 discounted_price = (
-                    int(menu.menu_price * (1 - item.max_discount_rate))
-                    if item.max_discount_rate
+                    int(menu.menu_price * (1 - item.current_discount_rate))
+                    if item.current_discount_rate
                     else menu.menu_price
                 )
                 menus_data.append(
@@ -716,8 +717,8 @@ class StoreSpaceDetailView(APIView):
                         "menu_price": menu.menu_price,
                         "item_id": item.item_id,
                         "discount_rate": (
-                            int(item.max_discount_rate * 100)
-                            if item.max_discount_rate
+                            int(item.current_discount_rate * 100)
+                            if item.current_discount_rate
                             else 0
                         ),
                         "discounted_price": discounted_price,
@@ -915,8 +916,8 @@ class StoreSingleSpaceDetailView(APIView):
             )
             if item:
                 discounted_price = (
-                    int(menu.menu_price * (1 - item.max_discount_rate))
-                    if item.max_discount_rate
+                    int(menu.menu_price * (1 - item.current_discount_rate))
+                    if item.current_discount_rate
                     else menu.menu_price
                 )
                 menus_data.append(
@@ -926,8 +927,8 @@ class StoreSingleSpaceDetailView(APIView):
                         "menu_image_url": menu.menu_image_url,
                         "item_id": item.item_id,
                         "discount_rate": (
-                            int(item.max_discount_rate * 100)
-                            if item.max_discount_rate
+                            int(item.current_discount_rate * 100)
+                            if item.current_discount_rate
                             else 0
                         ),
                         "discounted_price": discounted_price,
@@ -1146,11 +1147,11 @@ class StoreItemDetailView(APIView):
         selected_time = f"{item.item_reservation_time}:00"
 
         discount_rate_percent = (
-            int(item.max_discount_rate * 100) if item.max_discount_rate else 0
+            int(item.current_discount_rate * 100) if item.current_discount_rate else 0
         )
         discounted_price = (
-            int(menu.menu_price * (1 - item.max_discount_rate))
-            if item.max_discount_rate
+            int(menu.menu_price * (1 - item.current_discount_rate))
+            if item.current_discount_rate
             else menu.menu_price
         )
 
