@@ -20,7 +20,7 @@ class Store(BaseModel):
     store_category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     store_description = models.TextField(blank=True)
     store_address = models.CharField(max_length=200)
-    store_image_url = models.TextField(blank=True)  # TODO url은 URLField 쓰는 거 어떨까
+    store_image_url = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     is_dummy = models.BooleanField(default=False)
 
@@ -29,7 +29,7 @@ class StoreSpace(BaseModel):
     space_id = models.AutoField(primary_key=True)
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="spaces")
     space_name = models.CharField(max_length=100)
-    space_image_url = models.TextField(blank=True)  # TODO url...
+    space_image_url = models.TextField(blank=True)
     space_description = models.TextField(blank=True)
     is_dummy = models.BooleanField(default=False)  # 더미데이터 여부 표시
 
@@ -38,7 +38,7 @@ class StoreMenu(BaseModel):
     menu_id = models.AutoField(primary_key=True)
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="menus")
     menu_name = models.CharField(max_length=100)
-    menu_image_url = models.TextField(blank=True)  # TODO url...
+    menu_image_url = models.TextField(blank=True)
     menu_cost_price = models.PositiveIntegerField()  # 원가
     menu_price = models.PositiveIntegerField()  # 정가
     dp_weight = models.FloatField(default=0.0)  # 가중치

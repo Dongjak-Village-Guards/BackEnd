@@ -480,8 +480,8 @@ class LikeDetail(APIView):
                     "store_id": store.store_id,
                     "created_at": like.created_at,
                     "store_name": store.store_name,
-                    "distance": distance,  # TODO 실제 거리 계산 로직 필요
-                    "on_foot": on_foot,  # TODO 실제 도보 시간 계산 로직 필요
+                    "distance": distance,
+                    "on_foot": on_foot,
                     "store_image_url": store.store_image_url,
                     "menu_name": (
                         max_discount_item.menu.menu_name if max_discount_item else None
