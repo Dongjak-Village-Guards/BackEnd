@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, time
+from datetime import datetime
 import math
 from django.core.management.base import BaseCommand
 from django.utils import timezone as dj_timezone
@@ -8,9 +8,9 @@ from pricing.utils import sigmoid, calculate_time_offset_idx
 
 
 class Command(BaseCommand):
-    help = "StoreItem별 현재 할인율 시간별로 업데이트"
+    help = "StoreItem별 현재 할인율 시간별로 업데이트 (학습된 파라미터 활용 및 할인율 보정)"
 
-    price_grid_interval = 10
+    price_grid_interval = 10  # 가격 탐색 간격 10원으로 세밀화
 
     def gamma_tilde_to_gamma(self, gamma_tilde):
         return -math.log(math.exp(gamma_tilde) + 1)
@@ -24,11 +24,8 @@ class Command(BaseCommand):
 
         now = dj_timezone.now()
         today = now.date()
-
-        # 3시간(180분) 이내만 처리 -> 10분 단위 인덱스로 18 이하
-        max_time_offset = 18
-
-        batch_size = 1000
+        max_time_offset = 18  # 3시간 이내 (10분단위 인덱스 최대치)
+        batch_size = 1000  # 메모리/부하 완화용 배치 크기
 
         for menu in menus:
             self.stdout.write(f"메뉴 [{menu.menu_name}] 할인율 계산 시작")
@@ -43,7 +40,6 @@ class Command(BaseCommand):
             gamma = self.gamma_tilde_to_gamma(param.gamma_tilde)
             w = menu.dp_weight
 
-            # 오늘 예약된 재고 있는 아이템 대상으로 필터
             queryset = menu.storeitem_set.filter(
                 item_stock=1, item_reservation_date=today
             )
@@ -51,13 +47,11 @@ class Command(BaseCommand):
             items_to_update = []
             time_offset_map = {}
 
-            # iterator(chunk_size=batch_size) 로 메모리 절약하며 반복 처리
             for store_item in queryset.iterator(chunk_size=batch_size):
-                # 시간 인덱스 계산 함수 사용 (기존 함수 그대로 활용)
-                idx = calculate_time_offset_idx(store_item, now)
-                if idx is not None and idx <= max_time_offset:
+                t = calculate_time_offset_idx(store_item, now)
+                if t is not None and t <= max_time_offset:
                     items_to_update.append(store_item)
-                    time_offset_map[store_item.item_id] = idx
+                    time_offset_map[store_item.item_id] = t
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
@@ -70,7 +64,15 @@ class Command(BaseCommand):
                 best_price = None
                 best_profit = float("-inf")
 
-                # 100원 간격 그리드 탐색
+                p_min_n = p_min / 1000.0
+                p_max_n = p_max / 1000.0
+
+                z_min = a + b * p_min_n + gamma * t + w
+                z_max = a + b * p_max_n + gamma * t + w
+
+                expected_max_discount = 1 - p_min / menu.menu_price
+                expected_min_discount = 1 - p_max / menu.menu_price
+
                 for price_candidate in range(
                     p_min, p_max + 1, self.price_grid_interval
                 ):
@@ -78,26 +80,22 @@ class Command(BaseCommand):
                     z = a + b * p_n + gamma * t + w
                     p = sigmoid(z)
                     profit = p * price_candidate - cost
-
-                    self.stdout.write(
-                        f"item_id={store_item.item_id}, time_offset_idx={t}, price_candidate={price_candidate}, profit={profit:.2f}"
-                    )
-
                     if profit > best_profit:
                         best_profit = profit
                         best_price = price_candidate
 
                 discount = max(0.0, min(1 - best_price / menu.menu_price, max_discount))
 
-                self.stdout.write(
-                    f"item_id={store_item.item_id}, time_offset_idx={t}, best_price={best_price}, discount={discount:.4f}"
-                )
+                if discount < expected_min_discount:
+                    discount = expected_min_discount
+                elif discount > expected_max_discount:
+                    discount = expected_max_discount
 
                 store_item.current_discount_rate = discount
                 store_item.save(update_fields=["current_discount_rate"])
 
                 self.stdout.write(
-                    f"{menu.menu_name} - item_id {store_item.item_id}: 최적 가격 {best_price}원, 할인율 {discount:.4f}"
+                    f"item_id={store_item.item_id}, time_offset_idx={t}, 최적가격={best_price}, 할인율={discount:.4f}"
                 )
 
         self.stdout.write("할인율 시간별 업데이트 완료.")
