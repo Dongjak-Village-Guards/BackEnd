@@ -24,6 +24,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 from datetime import datetime
+from django.db.models import Sum
 
 from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
 
@@ -1381,14 +1382,117 @@ class OwnerSlot(APIView):
 class OwnerStatic(APIView):
     permission_classes = [IsOwnerRole]
 
-    def get(self, request):
-        store_id = request.data.get("store_id")
-        if not store_id:
-            return Response({"error" : "store_id 가 없습니다."})
-        day = request.data.get("day")
-        if not day:
-            return Response({"error" : "day 가 없습니다."})
+    def get(self, request, store_id, day):
         
+        try:
+            store = get_object_or_404(Store, store_id = store_id)
+        except Store.DoesNotExist:
+            return Response({"error":"Store not found"}, status = 404)
         
+        if day not in [7,30]:
+            return Response({"error":"Invalid 'day' parameter. Must be 7 or 30."}, status = 400)
 
-        pass
+        # store_id 로 해당 store의 menu들 다 가져와서 menu들의 리스트 가져오기
+        store_menus = StoreMenu.objects.filter(store=store)
+        menu_counts = {menu.menu_name: 0 for menu in store_menus}
+
+        # 0~23 리스트 만들기
+        hourly_counts = {hour: 0 for hour in range(24)}
+
+        # day가 7인지 30인지에 따라 최근 day일 reservation 정보 필터해서 현재 리스트 전부 가져오기.
+        today = datetime.now().date()
+        current_period_start = today - timedelta(days=day)
+        past_period_start = today - timedelta(days=day*2)
+
+        current_reservations = Reservation.objects.filter(
+            store_item__store=store,
+            reservation_slot__slot_reservation_date__range=[current_period_start, today]
+        ).select_related('store_item__menu', 'reservation_slot')
+
+        # day 에 따라 지난 통계 도 가져오기 (과거 리스트)
+        past_reservations = Reservation.objects.filter(
+            store_item__store=store,
+            reservation_slot__slot_reservation_date__range=[past_period_start, current_period_start - timedelta(days=1)]
+        ).select_related('store_item__menu', 'reservation_slot')
+
+        # 통계 초기화
+        current_total_reservations_count = 0
+        current_total_discount_amount = 0
+        current_total_price = 0
+
+        # 5. 현재 리스트의 예약 정보 계산
+        for res in current_reservations:
+            current_total_reservations_count += 1
+            current_total_discount_amount += res.reservation_cost
+            
+            menu = res.store_item.menu
+            if menu:
+                # 정가(total_price) 계산
+                current_total_price += menu.menu_price
+                
+                # 메뉴별 예약 횟수
+                if menu.menu_name in menu_counts:
+                    menu_counts[menu.menu_name] += 1
+            
+            # 시간대별 예약 횟수
+            reservation_hour = res.reservation_slot.slot_reservation_time
+            if 0 <= reservation_hour < 24:
+                hourly_counts[reservation_hour] += 1
+
+        # 6. 과거 리스트의 통계 계산
+        past_total_reservations_count = past_reservations.count()
+        past_total_discount_amount = past_reservations.aggregate(Sum('reservation_cost'))['reservation_cost__sum'] or 0
+        past_total_price = sum(res.store_item.menu.menu_price for res in past_reservations if res.store_item.menu) or 0
+        
+        # 7. 최종 수익(total_revenue) 계산
+        current_total_revenue = current_total_price - current_total_discount_amount
+        past_total_revenue = past_total_price - past_total_discount_amount
+
+        # 8. 성장률(delta) 계산
+        def calculate_delta(current, past):
+            if past == 0:
+                return "inf" if current > 0 else 0
+            return (current - past) / past * 100
+
+        revenue_delta = calculate_delta(current_total_revenue, past_total_revenue)
+        reservations_delta = calculate_delta(current_total_reservations_count, past_total_reservations_count)
+
+        # 메뉴 통계 딕셔너리를 리스트로 변환
+        menu_statistics_list = [{"name": name, "count": count} for name, count in menu_counts.items()]
+
+        # count를 기준으로 내림차순 정렬 (큰 값부터)
+        menu_statistics_list_sorted = sorted(menu_statistics_list, key=lambda x: x['count'], reverse=True)
+
+        # JSON 응답 구성
+        response_data = {
+            "total_revenue": {
+                "value": current_total_revenue,
+                "delta": round(revenue_delta, 2)
+            },
+            "total_reservations_count": {
+                "value": current_total_reservations_count,
+                "delta": round(reservations_delta, 2)
+            },
+            "total_discount_amount": {
+                "value": current_total_discount_amount
+            },
+            "menu_statistics": menu_statistics_list_sorted, 
+            "hourly_statistics": hourly_counts
+        }
+
+        return Response(response_data)
+
+        # -----------------------------------------------------------
+        # reservation 개수 가져와서 -> total_reservations_count 에 넣기
+
+        # 그리고 리스트당 각 reservation 계산하기
+
+        ## 일단 reservation_cost 가져와서 total_discount_amount 에 넣기
+        ## item 참고해서, 정가를 total_price 에 넣기
+        ## item 참고해서, menu 알아내고, 그 menu 리스트에 해당하면 +1 하기
+        ## 그리고 reservation의 slot 참고해서, 해당 시간(0~23) 리스트에 +1 더하기
+        
+        # 그렇게 다 하면, total_price(정가) - total_discount_amount(할인한 가격) 를 빼서, 최종 판매 가격인 total_revenue의 value 에 넣기.
+
+        # 그러면 이제 과거 리스트에서 얻어낸 total_revenue의 value와 현재 리스트의 것 비교해서 상승룰(delta) 구하기
+        # total_reservation_count 도 그렇게 하기

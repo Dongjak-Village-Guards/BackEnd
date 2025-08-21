@@ -44,5 +44,5 @@ urlpatterns = [
 
     # 공급자 api 관련
     path('me/owner/', OwnerStore.as_view(), name = "owner_store_join_or_get"),
-    path('stats/owner/', OwnerStatic.as_view(), name = "owner_static"),
+    path('<int:store_id>/<int:day>/stats/', OwnerStatic.as_view(), name = "owner_static"),
 ]
