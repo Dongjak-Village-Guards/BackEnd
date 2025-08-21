@@ -14,6 +14,13 @@ def sigmoid(x):
     return 1.0 / (1.0 + math.exp(-x))
 
 
+def gamma_to_gamma_tilde(gamma):
+    val = math.exp(-gamma) - 1
+    if val <= 0:
+        val = 1e-8
+    return math.log(val)
+
+
 def create_item_record(store_item, sold=1, is_dummy_flag=False):
     now = timezone.now()
     ItemRecord.objects.create(
@@ -66,7 +73,7 @@ def update_discount_param(store_item, sold=1):
 
     a = param.beta0
     b = param.alpha
-    gamma = param.gamma  # 감마 파라미터
+    gamma = param.gamma  # 읽기 전용 프로퍼티로 gamma 값을 읽는다
     w = store_item.menu.dp_weight  # 메뉴 가중치 필드
     lr = 1e-3
 
@@ -91,7 +98,7 @@ def update_discount_param(store_item, sold=1):
 
     param.beta0 = a
     param.alpha = b
-    param.gamma = gamma
+    param.gamma_tilde = gamma_to_gamma_tilde(gamma)  # 업데이트된 gamma로 변환
     param.save()
 
 

@@ -13,8 +13,21 @@ class Command(BaseCommand):
     epochs = 10
     price_grid_interval = 100
 
+    def gamma_to_gamma_tilde(self, gamma):
+        val = math.exp(-gamma) - 1
+        if val <= 0:
+            val = 1e-8
+        return math.log(val)
+
     def handle(self, *args, **kwargs):
-        for menu in StoreMenu.objects.all():
+        self.stdout.write("할인율 학습 시작...")
+        menus = StoreMenu.objects.all()
+        if not menus:
+            self.stdout.write("StoreMenu 데이터가 없습니다.")
+            return
+
+        for menu in menus:
+            self.stdout.write(f"메뉴 [{menu.menu_name}] 학습 시작")
             param, _ = MenuPricingParam.objects.get_or_create(menu=menu)
             a = param.beta0
             b = param.alpha
@@ -38,7 +51,6 @@ class Command(BaseCommand):
                         continue
 
                     sold = r.sold
-
                     w = store_item.menu.dp_weight
                     t = r.time_offset_idx
 
@@ -57,7 +69,7 @@ class Command(BaseCommand):
 
             param.beta0 = a
             param.alpha = b
-            param.gamma = gamma
+            param.gamma_tilde = self.gamma_to_gamma_tilde(gamma)
             param.save()
 
             menu.dp_weight = w
@@ -87,6 +99,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"{menu.menu_name}: 최적 가격 {best_price}원, 할인율 {discount:.4f}"
             )
+
+        self.stdout.write("할인율 학습 및 업데이트 완료.")
 
 
 # import math
