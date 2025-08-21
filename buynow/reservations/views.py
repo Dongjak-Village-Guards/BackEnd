@@ -257,7 +257,7 @@ class ReserveDetail(APIView):
         now = timezone.now()
 
         # 30분 전인지 확인 - 에러코드 추가
-        if reservation_datetime - now < datetime.timedelta(minutes=30):
+        if reservation_datetime - now < timedelta(minutes=30):
             return Response(
                 {
                     "errorCode": "CANCELLATION_NOT_ALLOWED",
