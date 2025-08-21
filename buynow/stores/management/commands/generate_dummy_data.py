@@ -1458,7 +1458,7 @@ class Command(BaseCommand):
             for day_offset in range(days):
                 date = start_date + timedelta(days=day_offset)
                 for hour in hours:
-                    stock = 1 if random.random() < 0.7 else 0
+                    stock = 1 if random.random() < 0.5 else 0
                     record = StoreItem(
                         menu=menu,
                         space=sms.space,
@@ -1575,11 +1575,11 @@ class Command(BaseCommand):
                     slot.is_reserved = True
                     slot.save()
                     items_with_stock.remove(item)
-                    store = item.store
-                    store.is_active = store.storeitem_set.filter(
-                        item_stock__gt=0
-                    ).exists()
-                    store.save()
+                    # store = item.store
+                    # store.is_active = store.storeitem_set.filter(
+                    #     item_stock__gt=0
+                    # ).exists()
+                    # store.save()
 
             if (idx + 1) % 10 == 0:
                 self.stdout.write(
@@ -1589,6 +1589,10 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write(self.style.NOTICE("예약 생성 완료"))
+        # 예약 생성 완료 후 store.is_active 일괄 업데이트
+        for store in stores:
+            store.is_active = store.storeitem_set.filter(item_stock__gt=0).exists()
+            store.save()
 
         # --- 미판매 재고에 대한 기록 ---
         count = 0
