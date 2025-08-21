@@ -659,19 +659,18 @@ class OwnerReservation(APIView):
         }
         return Response(response_data)
 
+    
+
+# 공급자용 예약 취소
+class OwnerReservationDetail(APIView):
+    permission_classes = [IsOwnerRole]
+
     # 예약 취소
-    def delete(self,request):
+    def delete(self,request, slot_id, reservation_id):
         user = request.user
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
         
-        slot_id = request.data.get("slot_id")
-        if not slot_id:
-            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
-        
-        reservation_id = request.data.get("reservation_id")
-        if not reservation_id:
-            return Response({"error" : "reservation_id 가 없습니다."}, status = 400)
         
         slot = get_object_or_404(StoreSlot, slot_id = slot_id)
 
@@ -707,19 +706,16 @@ class OwnerReservation(APIView):
         return Response({"message" : "예약 취소 성공"}, status=200)
 
 
-
 # 공급자용 make slot closed
 class OwnerClosed(APIView):
     permission_classes = [IsOwnerRole]
 
-    def patch(self, request):
+    def patch(self, request, slot_id):
         user = request.user
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        slot_id = request.data.get("slot_id")
-        if not slot_id:
-            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        
         slot = get_object_or_404(StoreSlot, slot_id = slot_id)
 
         # 예약 가능한 (예약 안된) slot을 예약 못하게 하는거니까.
@@ -736,14 +732,12 @@ class OwnerClosed(APIView):
 class OwnerOpen(APIView):
     permission_classes = [IsOwnerRole]
 
-    def patch(self, request):
+    def patch(self, request, slot_id):
         user = request.user
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        slot_id = request.data.get("slot_id")
-        if not slot_id:
-            return Response({"error" : "slot_id 가 없습니다."}, status = 400)
+        
         slot = get_object_or_404(StoreSlot, slot_id = slot_id)
 
         # 수동 마감(예약 안되게끔) 했던 slot을 예약 가능하게 하는거니까.
