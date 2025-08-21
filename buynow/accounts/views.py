@@ -150,7 +150,7 @@ class OwnerLoginAPIView(APIView):
     def post(self, request):
         serializer = OwnerLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        result = serializer.validated_data()
+        result = serializer.validated_data
 
         #user = result["user"]
         user_id = result["user_id"]
