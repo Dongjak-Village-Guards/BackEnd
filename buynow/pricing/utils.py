@@ -107,23 +107,46 @@ def safe_create_item_record(item, sold, is_dummy_flag):
 #     return idx
 
 
+#def calculate_time_offset_idx(store_item, current_time):
+#    reservation_datetime = datetime.combine(
+#        store_item.item_reservation_date, time(store_item.item_reservation_time)
+#    )
+
+#    # current_time이 naive면 지역 timezone aware로 변환
+#    if current_time.tzinfo is None:
+#        current_time = timezone.make_aware(
+#            current_time, timezone.get_current_timezone()
+#        )
+
+#    # reservation_datetime이 naive이면 지역 timezone aware로 변환
+#    if reservation_datetime.tzinfo is None:
+#        reservation_datetime = timezone.make_aware(
+#            reservation_datetime, timezone.get_current_timezone()
+#        )
+
+#    diff_minutes = (reservation_datetime - current_time).total_seconds() / 60
+#    idx = int(max(0, min(18, diff_minutes // 10)))
+#    return idx
+
 def calculate_time_offset_idx(store_item, current_time):
+    # DB 저장값은 UTC 기준
     reservation_datetime = datetime.combine(
         store_item.item_reservation_date, time(store_item.item_reservation_time)
     )
 
-    # current_time이 naive면 지역 timezone aware로 변환
-    if current_time.tzinfo is None:
-        current_time = timezone.make_aware(
-            current_time, timezone.get_current_timezone()
-        )
-
-    # reservation_datetime이 naive이면 지역 timezone aware로 변환
+    # reservation_datetime → UTC aware
     if reservation_datetime.tzinfo is None:
-        reservation_datetime = timezone.make_aware(
-            reservation_datetime, timezone.get_current_timezone()
-        )
+        reservation_datetime = timezone.make_aware(reservation_datetime, timezone.utc)
 
+    # current_time → UTC aware로 통일
+    if current_time.tzinfo is None:
+        current_time = timezone.make_aware(current_time, timezone.utc)
+    else:
+        current_time = current_time.astimezone(timezone.utc)
+
+    # 두 시간 차이 계산 (분 단위)
     diff_minutes = (reservation_datetime - current_time).total_seconds() / 60
+
+    # 10분 단위로 인덱스 계산, 0~18 범위로 클램핑
     idx = int(max(0, min(18, diff_minutes // 10)))
     return idx
