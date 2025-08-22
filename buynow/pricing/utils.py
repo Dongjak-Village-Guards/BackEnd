@@ -153,9 +153,9 @@ def calculate_time_offset_idx(store_item, current_time):
 
     diff_minutes = (reservation_datetime - current_naive).total_seconds() / 60
 
-    if diff_minutes <= 9:
+    if diff_minutes <= 0:
         idx = 0
     else:
-        idx = int((diff_minutes - 9) // 10)
+        idx = int((diff_minutes - 1) // 10) + 1
 
     return max(0, idx)
