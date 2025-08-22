@@ -108,7 +108,7 @@ def safe_create_item_record(item, sold, is_dummy_flag):
 #     idx = int(max(0, min(18, diff_minutes // 10)))
 #     return idx
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timezone as dt_timezone
 from django.utils import timezone
 
 
@@ -117,27 +117,22 @@ def calculate_time_offset_idx(store_item, current_time):
         store_item.item_reservation_date, time(store_item.item_reservation_time)
     )
 
-    # reservation_datetime에 timezone 정보가 없으면 current_time timezone으로 맞춤
     if reservation_datetime.tzinfo is None:
         reservation_datetime = timezone.make_aware(
             reservation_datetime, timezone=current_time.tzinfo
         )
 
-    # current_time이 UTC가 아니면 UTC로 변환
-    if current_time.tzinfo != timezone.utc:
-        current_time = current_time.astimezone(timezone.utc)
-        reservation_datetime = reservation_datetime.astimezone(timezone.utc)
+    # django.utils.timezone.utc 대신 datetime.timezone.utc 사용
+    if current_time.tzinfo != dt_timezone.utc:
+        current_time = current_time.astimezone(dt_timezone.utc)
+        reservation_datetime = reservation_datetime.astimezone(dt_timezone.utc)
 
     diff_minutes = (reservation_datetime - current_time).total_seconds() / 60
 
-    # 9분 전부터 인덱스 0, 19분 전부터 1, ... 으로 계산
-    # diff_minutes가 9 이하면 0, 그 이상이면 (diff_minutes - 9) // 10
     if diff_minutes <= 9:
         idx = 0
     else:
         idx = int((diff_minutes - 9) // 10)
 
-    # 음수면 0으로 처리 (예약 시간이 이미 지났을 경우)
     idx = max(0, idx)
-
     return idx
