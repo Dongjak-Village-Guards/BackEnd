@@ -80,6 +80,9 @@ class Command(BaseCommand):
                     z = a + b * p_n + gamma * t + w
                     p = sigmoid(z)
 
+                    # # 여기서 sold가 1(팔림)이면 가중치 2.0, 아니면 1.0  <- 이 아래 2줄 살리고 그 아래 줄을 주석처리하던가...
+                    # weight = 2.0 if sold == 1 else 1.0
+                    # delta = (p - sold) * weight
                     delta = p - sold
 
                     # 파라미터 경사 하강법 업데이트
