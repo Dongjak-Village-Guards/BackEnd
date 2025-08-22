@@ -111,11 +111,11 @@ class Command(BaseCommand):
 
                 if previous_discount != discount:
                     self.stdout.write(
-                        f"item_id={store_item.item_id}: 할인율 변경 - 이전: {previous_discount:.4f}, 현재: {discount:.4f}, 시간인덱스={t}, 최적가격={best_price}"
+                        f"menu_id={menu.menu_id} item_id={store_item.item_id}: 할인율 변경 - 이전: {previous_discount:.4f}, 현재: {discount:.4f}, 시간인덱스={t}, 최적가격={best_price}"
                     )
                 else:
                     self.stdout.write(
-                        f"item_id={store_item.item_id}: 할인율 변동 없음 - {discount:.4f}, 시간인덱스={t}, 최적가격={best_price}"
+                        f"menu_id={menu.menu_id} item_id={store_item.item_id}: 할인율 변동 없음 - {discount:.4f}, 시간인덱스={t}, 최적가격={best_price}"
                     )
 
                 self.stdout.write(
