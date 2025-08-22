@@ -108,31 +108,55 @@ def safe_create_item_record(item, sold, is_dummy_flag):
 #     idx = int(max(0, min(18, diff_minutes // 10)))
 #     return idx
 
-from datetime import datetime, time, timezone as dt_timezone
+# from datetime import datetime, time, timezone as dt_timezone
+# from django.utils import timezone
+
+
+# def calculate_time_offset_idx(store_item, current_time):
+#     reservation_datetime = datetime.combine(
+#         store_item.item_reservation_date, time(store_item.item_reservation_time)
+#     )
+
+#     if reservation_datetime.tzinfo is None:
+#         reservation_datetime = timezone.make_aware(
+#             reservation_datetime, timezone=current_time.tzinfo
+#         )
+
+#     # django.utils.timezone.utc 대신 datetime.timezone.utc 사용
+#     if current_time.tzinfo != dt_timezone.utc:
+#         current_time = current_time.astimezone(dt_timezone.utc)
+#         reservation_datetime = reservation_datetime.astimezone(dt_timezone.utc)
+
+#     diff_minutes = (reservation_datetime - current_time).total_seconds() / 60
+
+#     if diff_minutes <= 9:
+#         idx = 0
+#     else:
+#         idx = int((diff_minutes - 9) // 10)
+
+#     idx = max(0, idx)
+#     return idx
+
+from datetime import datetime, time
 from django.utils import timezone
 
 
 def calculate_time_offset_idx(store_item, current_time):
+    # DB의 정수 시간 기준으로 예약 시간 생성 (분, 초는 0)
     reservation_datetime = datetime.combine(
-        store_item.item_reservation_date, time(store_item.item_reservation_time)
+        store_item.item_reservation_date,
+        time(hour=store_item.item_reservation_time, minute=0, second=0),
     )
 
-    if reservation_datetime.tzinfo is None:
-        reservation_datetime = timezone.make_aware(
-            reservation_datetime, timezone=current_time.tzinfo
-        )
+    # current_time에서 시간대 정보 제거 (naive datetime으로)
+    current_naive = current_time.replace(tzinfo=None)
 
-    # django.utils.timezone.utc 대신 datetime.timezone.utc 사용
-    if current_time.tzinfo != dt_timezone.utc:
-        current_time = current_time.astimezone(dt_timezone.utc)
-        reservation_datetime = reservation_datetime.astimezone(dt_timezone.utc)
+    diff_minutes = (reservation_datetime - current_naive).total_seconds() / 60
 
-    diff_minutes = (reservation_datetime - current_time).total_seconds() / 60
-
+    # 9분 전까지 0, 이후 10분 간격 인덱스 증가
     if diff_minutes <= 9:
         idx = 0
     else:
         idx = int((diff_minutes - 9) // 10)
 
-    idx = max(0, idx)
-    return idx
+    return max(0, idx)
