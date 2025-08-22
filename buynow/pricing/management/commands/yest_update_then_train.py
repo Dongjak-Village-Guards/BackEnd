@@ -1,9 +1,10 @@
-import datetime
 from django.core.management.base import BaseCommand
+from django.utils import timezone
+from datetime import timedelta
 from stores.models import StoreItem
 from records.models import ItemRecord
-from django.core.management import call_command
 from pricing.utils import safe_create_item_record
+from django.core.management import call_command
 
 
 class Command(BaseCommand):
@@ -14,10 +15,13 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write("어제 미판매(재고 0) 아이템 배치별 레코드 생성 시작...")
 
-        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        yesterday = timezone.localtime().date() - timedelta(
+            days=1
+        )  # 한국 시간 기준 어제
 
         candidate_qs = StoreItem.objects.filter(
-            item_reservation_date=yesterday, item_stock=0
+            item_reservation_date=yesterday,
+            item_stock=0,
         )
 
         total_count = candidate_qs.count()
@@ -31,7 +35,8 @@ class Command(BaseCommand):
 
             for item in batch_items:
                 exists = ItemRecord.objects.filter(
-                    store_item_id=item.item_id, sold=0
+                    store_item_id=item.item_id,
+                    sold=0,
                 ).exists()
                 if not exists:
                     safe_create_item_record(

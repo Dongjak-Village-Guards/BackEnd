@@ -24,6 +24,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 from datetime import datetime
+from django.utils import timezone
 
 from django.contrib.auth import get_user_model  # 사용자 모델 가져오기 <- 최신화!
 
@@ -136,17 +137,34 @@ class StoreListView(APIView):
             )  # 주소 필요시 400 반환
 
         category = request.GET.get("store_category", None)
-        today = datetime.now().date()
+
+        now = timezone.localtime()
+        today = now.date()
         target_date = today
         target_time = time_filter
         if time_filter >= 24:
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
+        # today = datetime.now().date()
+        # target_date = today
+        # target_time = time_filter
+        # if time_filter >= 24:
+        #     target_date = today + timedelta(days=1)
+        #     target_time = time_filter - 24
+
+        # 한국 시간 기준 target_time을 UTC 기준 시간으로 변환
+        target_time_utc = (target_time - 9) % 24  # 9시간 빼고 0~23 범위로 조정
+
+        # 날짜 보정: 만약 변환한 UTC 시간이 '하루 전' 시간이면 날짜를 하루 전으로 줄임
+        if target_time < 9:
+            target_date = target_date - timedelta(days=1)
+
         # 기존 필터 조건에서 item_stock__gt=0 제거 —> 재고 0인 아이템 확인해야 하므로 따로 처리
         base_filters = {
             "item_reservation_date": target_date,
-            "item_reservation_time": target_time,
+            # "item_reservation_time": target_time,
+            "item_reservation_time": target_time_utc,
             "store__is_active": True,
         }
 
@@ -453,12 +471,34 @@ class StoreSpacesDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        today = datetime.now().date()
+        now = timezone.localtime()
+        today = now.date()
         target_date = today
-        target_time = time_filter  # 날짜/시간 보정용 변수들
-        if time_filter >= 24:  # 24이상은 다음날로 계산
+        target_time = time_filter
+        if time_filter >= 24:
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
+
+        # today = datetime.now().date()
+        # target_date = today
+        # target_time = time_filter  # 날짜/시간 보정용 변수들
+        # if time_filter >= 24:  # 24이상은 다음날로 계산
+        #     target_date = today + timedelta(days=1)
+        #     target_time = time_filter - 24
+
+        # --- 한국 시간 기준 target_time을 UTC 기준 시간으로 변환 --- #
+        target_time_utc = (target_time - 9) % 24  # 9시간 빼서 0~23 사이로 변환
+
+        # --- UTC 변환 후 0~8 시라면 target_date를 하루 전으로 보정 (UTC 시간 기준 날짜 맞춤) --- #
+        if target_time < 9:
+            target_date = target_date - timedelta(days=1)
+
+        # --- 실제 DB 조회용 필터(base_filters) 정의 --- #
+        base_filters = {
+            "item_reservation_date": target_date,  # UTC 날짜 기준 필터링
+            "item_reservation_time": target_time_utc,  # UTC 시간 기준 필터링
+            "store__is_active": True,
+        }
 
         # user_address = getattr(request.user, "user_address", None)
         store_address = getattr(store, "store_address", None)
@@ -493,7 +533,7 @@ class StoreSpacesDetailView(APIView):
                 store=store,
                 space=space,
                 item_reservation_date=target_date,
-                item_reservation_time=target_time,
+                item_reservation_time=target_time_utc,
             ).aggregate(Max("max_discount_rate"))["max_discount_rate__max"]
 
             max_discount_percent = int(max_discount * 100) if max_discount else 0
@@ -504,7 +544,7 @@ class StoreSpacesDetailView(APIView):
                 store=store,
                 space=space,
                 item_reservation_date=target_date,
-                item_reservation_time=target_time,
+                item_reservation_time=target_time_utc,
                 item_stock=0,
             ).exists()
 
@@ -516,7 +556,7 @@ class StoreSpacesDetailView(APIView):
                     store=store,
                     space=space,
                     item_reservation_date=target_date,
-                    item_reservation_time=target_time,
+                    item_reservation_time=target_time_utc,
                     item_stock__gt=0,
                 ).exists()
 
@@ -646,12 +686,34 @@ class StoreSpaceDetailView(APIView):
 
         store = space.store
 
-        today = datetime.now().date()
+        now = timezone.localtime()
+        today = now.date()
         target_date = today
         target_time = time_int
         if time_int >= 24:
             target_date = today + timedelta(days=1)
             target_time = time_int - 24
+
+        # today = datetime.now().date()
+        # target_date = today
+        # target_time = time_int
+        # if time_int >= 24:
+        #     target_date = today + timedelta(days=1)
+        #     target_time = time_int - 24
+
+        # --- 한국 시간 기준 target_time을 UTC 기준 시간으로 변환 --- #
+        target_time_utc = (target_time - 9) % 24  # 9시간 빼서 0~23 사이로 변환
+
+        # --- UTC 변환 후 0~8 시라면 target_date를 하루 전으로 보정 (UTC 시간 기준 날짜 맞춤) --- #
+        if target_time < 9:
+            target_date = target_date - timedelta(days=1)
+
+        # --- 실제 DB 조회용 필터(base_filters) 정의 --- #
+        base_filters = {
+            "item_reservation_date": target_date,  # UTC 날짜 기준 필터링
+            "item_reservation_time": target_time_utc,  # UTC 시간 기준 필터링
+            "store__is_active": True,
+        }
         selected_time_formatted = f"{target_time}:00"
 
         # StoreMenuSpace에서 해당 space_id에 연결된 menu들
@@ -668,7 +730,8 @@ class StoreSpaceDetailView(APIView):
             )
 
         menus_data = []
-        today = datetime.now().date()
+        # today = datetime.now().date()
+        today = timezone.localtime().date()
 
         # 각 메뉴별로 해당 시간대에 할인율 높은 순으로 StoreItem 가져오기
         # 여러 개 모두 반환
@@ -682,7 +745,7 @@ class StoreSpaceDetailView(APIView):
                 menu=menu,
                 space=space,
                 item_reservation_date=target_date,
-                item_reservation_time=target_time,
+                item_reservation_time=target_time_utc,
             ).order_by("-max_discount_rate")
 
             if not store_items.exists():
@@ -870,12 +933,34 @@ class StoreSingleSpaceDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        today = datetime.now().date()
+        now = timezone.localtime()
+        today = now.date()
         target_date = today
         target_time = time_filter
         if time_filter >= 24:
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
+
+        # --- 한국 시간 기준 target_time을 UTC 기준 시간으로 변환 --- #
+        target_time_utc = (target_time - 9) % 24  # 9시간 빼서 0~23 사이로 변환
+
+        # --- UTC 변환 후 0~8 시라면 target_date를 하루 전으로 보정 (UTC 시간 기준 날짜 맞춤) --- #
+        if target_time < 9:
+            target_date = target_date - timedelta(days=1)
+
+        # --- 실제 DB 조회용 필터(base_filters) 정의 --- #
+        base_filters = {
+            "item_reservation_date": target_date,  # UTC 날짜 기준 필터링
+            "item_reservation_time": target_time_utc,  # UTC 시간 기준 필터링
+            "store__is_active": True,
+        }
+
+        # today = datetime.now().date()
+        # target_date = today
+        # target_time = time_filter
+        # if time_filter >= 24:
+        #     target_date = today + timedelta(days=1)
+        #     target_time = time_filter - 24
         selected_time_formatted = f"{target_time}:00"
 
         space = StoreSpace.objects.filter(store=store).first()
@@ -909,7 +994,7 @@ class StoreSingleSpaceDetailView(APIView):
                     menu=menu,
                     space=space,
                     item_reservation_date=target_date,
-                    item_reservation_time=target_time,
+                    item_reservation_time=target_time_utc,
                 )
                 .order_by("-max_discount_rate")
                 .first()

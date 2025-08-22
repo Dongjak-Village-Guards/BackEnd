@@ -1,7 +1,7 @@
-from datetime import datetime
-import math
 from django.core.management.base import BaseCommand
-from django.utils import timezone as dj_timezone
+from django.utils import timezone
+from datetime import timedelta
+import math
 from stores.models import StoreMenu
 from pricing.models import MenuPricingParam
 from pricing.utils import sigmoid, calculate_time_offset_idx
@@ -17,15 +17,29 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         self.stdout.write("할인율 시간별 업데이트 시작...")
+
         menus = StoreMenu.objects.all()
         if not menus:
             self.stdout.write("StoreMenu 데이터가 없습니다.")
             return
 
-        now = dj_timezone.now()
+        now = timezone.localtime()  # 한국 시간 기준 현재시각
         today = now.date()
+
         max_time_offset = 18  # 3시간 이내 (10분단위 인덱스 최대치)
         batch_size = 1000  # 메모리/부하 완화용 배치 크기
+
+        # 예를 들어 현재 시간
+        time_kst = now.hour  # 0~23 한국 시간 기준 시간
+
+        # 시간 변환: 한국 시간 → UTC 시간
+        target_time_utc = (time_kst - 9) % 24
+
+        # 날짜 보정: 0~8시면 하루 전 날짜로
+        if time_kst < 9:
+            target_date = today - timedelta(days=1)
+        else:
+            target_date = today
 
         for menu in menus:
             self.stdout.write(f"메뉴 [{menu.menu_name}] 할인율 계산 시작")
@@ -41,7 +55,9 @@ class Command(BaseCommand):
             w = menu.dp_weight
 
             queryset = menu.storeitem_set.filter(
-                item_stock=1, item_reservation_date=today
+                item_stock=1,
+                item_reservation_date=target_date,
+                item_reservation_time=target_time_utc,
             )
 
             items_to_update = []
@@ -55,9 +71,6 @@ class Command(BaseCommand):
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
-                # self.stdout.write(
-                #     f"item_id={store_item.item_id}, time_offset_idx={t}"
-                # )  # 시간 인덱스 로그 출력
                 cost = menu.menu_cost_price
 
                 max_discount = store_item.max_discount_rate or 0.3
@@ -70,7 +83,6 @@ class Command(BaseCommand):
                 p_min_n = p_min / 1000.0
                 p_max_n = p_max / 1000.0
 
-                # z_min, z_max로 예상 구매 확률 계산
                 z_min = a + b * p_min_n + gamma * t + w
                 z_max = a + b * p_max_n + gamma * t + w
 
@@ -80,7 +92,6 @@ class Command(BaseCommand):
                 expected_max_discount = 1 - p_min / menu.menu_price
                 expected_min_discount = 1 - p_max / menu.menu_price
 
-                # 구매 확률 기반 할인율 보정 (숫자는 조정 가능...)
                 if p_min_prob < 0.2:
                     expected_max_discount = min(expected_max_discount, 0.3)
                 if p_max_prob > 0.8:

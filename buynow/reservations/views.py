@@ -419,7 +419,8 @@ class LikeDetail(APIView):
 
         # 기본 시간: 현재 시간의 정각
         if not time_filter:
-            time_filter = datetime.now().hour
+            # time_filter = datetime.now().hour
+            time_filter = timezone.localtime().hour
         else:
             time_filter = int(time_filter)
 
@@ -446,7 +447,8 @@ class LikeDetail(APIView):
             ).select_related("menu")
 
             # 모든 space의 slot중 time_filter에 해당하는 거 찾고, 그 slot의 is_reserved가 다 true면 is_available은 false
-            today = date.today()
+            # today = date.today()
+            today = timezone.localtime().date()
             is_available = False
 
             spaces = StoreSpace.objects.filter(store=store)
@@ -576,9 +578,12 @@ class OwnerReservation(APIView):
                 {"error": "해당하는 스토어를 찾을 수 없습니다."}, status=404
             )
 
-        today = date.today()
+        # today = date.today()
+        # tomorrow = today + timedelta(days=1)
+        # now = datetime.now().hour
+        now = timezone.localtime()
+        today = now.date()
         tomorrow = today + timedelta(days=1)
-        now = datetime.now().hour
 
         today_spaces_data = []
         tomorrow_spaces_data = []
@@ -666,29 +671,23 @@ class OwnerReservation(APIView):
             )
 
         response_data = {
-            "today" : {
-                "spaces" : today_spaces_data
-            },
-            "tomorrow" : {
-                "spaces" : tomorrow_spaces_data
-            }
+            "today": {"spaces": today_spaces_data},
+            "tomorrow": {"spaces": tomorrow_spaces_data},
         }
         return Response(response_data)
 
-    
 
 # 공급자용 예약 취소
 class OwnerReservationDetail(APIView):
     permission_classes = [IsOwnerRole]
 
     # 예약 취소
-    def delete(self,request, slot_id, reservation_id):
+    def delete(self, request, slot_id, reservation_id):
         user = request.user
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-        
-        
-        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        slot = get_object_or_404(StoreSlot, slot_id=slot_id)
 
         if slot.is_reserved == False:  # 예약이 아직 안되어있다는 거니까.
             return Response(
@@ -719,7 +718,7 @@ class OwnerReservationDetail(APIView):
             slot.is_reserved = False
             slot.save()
 
-        return Response({"message" : "예약 취소 성공"}, status=200)
+        return Response({"message": "예약 취소 성공"}, status=200)
 
 
 # 공급자용 make slot closed
@@ -731,8 +730,7 @@ class OwnerClosed(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        
-        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+        slot = get_object_or_404(StoreSlot, slot_id=slot_id)
 
         # 예약 가능한 (예약 안된) slot을 예약 못하게 하는거니까.
         if (
@@ -759,8 +757,7 @@ class OwnerOpen(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        
-        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+        slot = get_object_or_404(StoreSlot, slot_id=slot_id)
 
         # 수동 마감(예약 안되게끔) 했던 slot을 예약 가능하게 하는거니까.
         if slot.is_reserved == False:  # false 면 이미 예약해도 되는 거니까 잘못된거지.
