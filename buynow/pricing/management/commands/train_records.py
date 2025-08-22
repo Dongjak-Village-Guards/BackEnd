@@ -99,7 +99,7 @@ class Command(BaseCommand):
 
             # 메뉴 가중치 업데이트
             menu.dp_weight = w
-            menu.save(update_fields=["dp_weight"])
+            menu.save(update_fields=["dp_weight", "updated_at"])
 
             # 학습 완료된 레코드 is_learned=True 처리
             record_ids = [r.record_id for r in records]

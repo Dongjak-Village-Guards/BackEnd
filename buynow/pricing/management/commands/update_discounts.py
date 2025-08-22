@@ -107,7 +107,7 @@ class Command(BaseCommand):
                 previous_discount = store_item.current_discount_rate
 
                 store_item.current_discount_rate = discount
-                store_item.save(update_fields=["current_discount_rate"])
+                store_item.save(update_fields=["current_discount_rate", "updated_at"])
 
                 if previous_discount != discount:
                     self.stdout.write(
