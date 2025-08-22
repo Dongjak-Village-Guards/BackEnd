@@ -142,18 +142,17 @@ from django.utils import timezone
 
 
 def calculate_time_offset_idx(store_item, current_time):
-    # DB의 정수 시간 기준으로 예약 시간 생성 (분, 초는 0)
+    # current_time을 한국 시간(KST) 기준으로 변환 후 naive datetime으로 만듦
+    current_naive = timezone.localtime(current_time).replace(tzinfo=None)
+
+    # DB 저장된 정수 시(hour)로 naive datetime 생성 (분, 초는 0)
     reservation_datetime = datetime.combine(
         store_item.item_reservation_date,
         time(hour=store_item.item_reservation_time, minute=0, second=0),
     )
 
-    # current_time에서 시간대 정보 제거 (naive datetime으로)
-    current_naive = current_time.replace(tzinfo=None)
-
     diff_minutes = (reservation_datetime - current_naive).total_seconds() / 60
 
-    # 9분 전까지 0, 이후 10분 간격 인덱스 증가
     if diff_minutes <= 9:
         idx = 0
     else:
