@@ -56,8 +56,8 @@ class Command(BaseCommand):
                     f"{menu.menu_name}: 학습 데이터 부족 (신규 {record_count}건)"
                 )
 
-            # 최신 50개 데이터만 학습 데이터로 사용
-            records = queryset.order_by("-created_at")[:50]
+            # 최신 100개 데이터만 학습 데이터로 사용
+            records = queryset.order_by("-created_at")[:100]
 
             store_items = StoreItem.objects.filter(
                 item_id__in=[r.store_item_id for r in records]
