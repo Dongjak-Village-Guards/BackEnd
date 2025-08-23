@@ -14,6 +14,7 @@ import random  # 더미 데이터 랜덤 선택용!
 
 from .models import Store, StoreItem, StoreSpace, StoreMenu, StoreMenuSpace, StoreSlot
 from reservations.models import UserLike, Reservation
+from records.models import ItemRecord
 from config.kakaoapi import change_to_cau
 
 from rest_framework import status
@@ -1488,6 +1489,28 @@ class OwnerStatic(APIView):
         # count를 기준으로 내림차순 정렬 (큰 값부터)
         menu_statistics_list_sorted = sorted(menu_statistics_list, key=lambda x: x['count'], reverse=True)
 
+        # time index 랑 당시 할인율 보내기 (7일, 30일 <- created_at으로 확인)
+        # 해당 가게의 store_id 로 item id 다 찾고,
+        # item_id 로 최근 7/30 일간 (created_at) 생성된 ItemRecord 가져오기 time_offset_idx 랑 record_discount_rate 만.
+        # 리스트에 담아서 주기
+        # --- 9. time_offset_idx와 record_discount_rate 데이터 구성 --- #
+        store_item_ids = StoreItem.objects.filter(store=store).values_list("item_id", flat=True)
+
+        # 최근 day일 동안 생성된 ItemRecord 가져오기
+        record_start_date = today - timedelta(days=day)
+        item_records = ItemRecord.objects.filter(
+            store_item_id__in=store_item_ids,
+            created_at__gte=record_start_date  # BaseModel 상속받았으니 created_at 존재한다고 가정
+        ).values("time_offset_idx", "record_discount_rate", "created_at")
+
+        time_dix_discount_rate = [
+            {
+                "time_offset_idx": rec["time_offset_idx"],
+                "discount_rate": rec["record_discount_rate"],
+            }
+            for rec in item_records
+        ]
+
         # JSON 응답 구성
         response_data = {
             "total_revenue": {
@@ -1498,9 +1521,10 @@ class OwnerStatic(APIView):
                 "value": current_total_reservations_count,
                 "delta": round(reservations_delta, 2) if isinstance(reservations_delta, (int, float)) else reservations_delta
             },
-            "total_discount_amount": {
+            "total_discount_amount":{
                 "value": current_total_discount_amount
             },
+            "time_idx_and_discount_rate" : time_dix_discount_rate,
             "menu_statistics": menu_statistics_list_sorted, 
             "hourly_statistics": hourly_counts
         }
