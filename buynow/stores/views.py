@@ -254,6 +254,22 @@ class StoreListView(APIView):
                 is_liked = True
                 liked_id = like.like_id
 
+            # spaces 들의 목록을 보여줄 때
+            is_available = False
+            spaces = StoreSpace.objects.filter(store=store)
+            for space in spaces:
+                slot = get_object_or_404(
+                    StoreSlot,
+                    space=space,
+                    slot_reservation_date=target_date,
+                    slot_reservation_time=target_time,
+                )
+                if slot.is_reserved == False:
+                    is_available = True
+                    break
+            if is_available == False:
+                continue
+
             results.append(
                 {
                     "store_id": store_id,
@@ -521,6 +537,16 @@ class StoreSpacesDetailView(APIView):
                     item_reservation_time=target_time,
                     item_stock__gt=0,
                 ).exists()
+
+            if is_possible == True:
+                slot = get_object_or_404(
+                    StoreSlot,
+                    space=space,
+                    slot_reservation_date=target_date,
+                    slot_reservation_time=target_time,
+                )
+                if slot.is_reserved == True:
+                    is_possible = False
 
             store_data["spaces"].append(
                 {
