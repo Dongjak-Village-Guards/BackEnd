@@ -1409,6 +1409,11 @@ class OwnerStatic(APIView):
         except Store.DoesNotExist:
             return Response({"error":"Store not found"}, status = 404)
         
+        user = request.user
+        if store.store_owner != user:
+            return Response({"error" : "가게 주인이 아닙니다."}, status = 403)
+
+
         if day not in [7,30]:
             return Response({"error":"Invalid 'day' parameter. Must be 7 or 30."}, status = 400)
 
