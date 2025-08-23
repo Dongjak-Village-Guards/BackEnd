@@ -254,6 +254,22 @@ class StoreListView(APIView):
                 is_liked = True
                 liked_id = like.like_id
 
+            # spaces 들의 목록을 보여줄 때
+            is_available = False
+            spaces = StoreSpace.objects.filter(store=store)
+            for space in spaces:
+                slot = get_object_or_404(
+                    StoreSlot,
+                    space=space,
+                    slot_reservation_date=target_date,
+                    slot_reservation_time=target_time,
+                )
+                if slot.is_reserved == False:
+                    is_available = True
+                    break
+            if is_available == False:
+                continue
+
             results.append(
                 {
                     "store_id": store_id,
@@ -521,6 +537,16 @@ class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고�
                     item_reservation_time=target_time,
                     item_stock__gt=0,
                 ).exists()
+
+            if is_possible == True:
+                slot = get_object_or_404(
+                    StoreSlot,
+                    space=space,
+                    slot_reservation_date=target_date,
+                    slot_reservation_time=target_time,
+                )
+                if slot.is_reserved == True:
+                    is_possible = False
 
             store_data["spaces"].append(
                 {
@@ -1511,6 +1537,9 @@ class OwnerStatic(APIView):
             for rec in item_records
         ]
 
+        # 이 가게에 최대 할인율 구하기
+        max_discount_rate = StoreItem.objects.filter(store=store).aggregate(Max("max_discount_rate"))["max_discount_rate__max"] or 0
+
         # JSON 응답 구성
         response_data = {
             "total_revenue": {
@@ -1523,6 +1552,9 @@ class OwnerStatic(APIView):
             },
             "total_discount_amount":{
                 "value": current_total_discount_amount
+            },
+            "max_discount_rate":{
+                "value" : max_discount_rate
             },
             "time_idx_and_discount_rate" : time_dix_discount_rate,
             "menu_statistics": menu_statistics_list_sorted, 

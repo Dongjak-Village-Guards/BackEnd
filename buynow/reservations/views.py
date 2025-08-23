@@ -420,14 +420,35 @@ class LikeDetail(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        time_filter = request.query_params.get("time")
+        time_param = request.query_params.get("time")
         category_filter = request.query_params.get("store_category")
 
         # 기본 시간: 현재 시간의 정각
-        if not time_filter:
-            time_filter = datetime.now().hour
+        #if not time_filter:
+        #    time_filter = datetime.now().hour
+        #else:
+        #    time_filter = int(time_filter)
+
+        # time_filter 값에 따라 날짜와 시간을 동적으로 설정
+        try:
+            if time_param is not None:
+                time_filter = int(time_param)
+                if not 0 <= time_filter <= 36:
+                    return Response({"error": "유효하지 않은 시간 값입니다. 0부터 36 사이의 값을 입력해주세요."}, status=400)
+            else:
+                time_filter = datetime.now().hour
+        except ValueError:
+            return Response({"error": "시간 값은 정수여야 합니다."}, status=400)
+
+        # 요청된 시간에 따라 예약 날짜를 계산
+        if time_filter >= 24:
+            reservation_date = date.today() + timedelta(days=1)
+            # StoreItem 예약 시간은 0-23시 기준이므로, 24를 빼서 다음날의 시간으로 변환
+            reservation_time_for_items = time_filter - 24
         else:
-            time_filter = int(time_filter)
+            reservation_date = date.today()
+            reservation_time_for_items = time_filter
+
 
         # 찜한 매장 가져오기
         user_likes = (
@@ -447,12 +468,13 @@ class LikeDetail(APIView):
                 continue
 
             # StoreItem에서 예약 가능 여부 확인
+            
             items = StoreItem.objects.filter(
-                store=store, item_reservation_time=time_filter, item_stock__gt=0
+                store=store, item_reservation_date = reservation_date, item_reservation_time=reservation_time_for_items, item_stock__gt=0
             ).select_related("menu")
 
             # 모든 space의 slot중 time_filter에 해당하는 거 찾고, 그 slot의 is_reserved가 다 true면 is_available은 false
-            today = date.today()
+            #today = date.today()
             is_available = False
 
             spaces = StoreSpace.objects.filter(store=store)
@@ -460,8 +482,8 @@ class LikeDetail(APIView):
                 slot = get_object_or_404(
                     StoreSlot,
                     space=space,
-                    slot_reservation_date=today,
-                    slot_reservation_time=time_filter,
+                    slot_reservation_date=reservation_date,
+                    slot_reservation_time=reservation_time_for_items,
                 )
                 if slot.is_reserved == False:
                     is_available = True
