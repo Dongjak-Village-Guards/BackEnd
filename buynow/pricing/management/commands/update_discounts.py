@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 from django.core.management.base import BaseCommand
 from django.utils import timezone as dj_timezone
@@ -24,7 +24,8 @@ class Command(BaseCommand):
 
         now = dj_timezone.now()
         today = now.date()
-        max_time_offset = 18  # 3시간 이내 (10분단위 인덱스 최대치)
+        tomorrow = today + timedelta(days=1)
+        max_time_offset = 143  # 하루 최대 시간 인덱스 (5분 단위, 24*60/5 - 1)
         batch_size = 1000  # 메모리/부하 완화용 배치 크기
 
         for menu in menus:
@@ -41,7 +42,7 @@ class Command(BaseCommand):
             w = menu.dp_weight
 
             queryset = menu.storeitem_set.filter(
-                item_stock=1, item_reservation_date=today
+                item_stock=1, item_reservation_date__range=(today, tomorrow)
             )
 
             items_to_update = []
@@ -52,13 +53,42 @@ class Command(BaseCommand):
                 if t is not None and t <= max_time_offset:
                     items_to_update.append(store_item)
                     time_offset_map[store_item.item_id] = t
+                    self.stdout.write(
+                        f"DEBUG: item_id={store_item.item_id}, time_offset_idx={t}"
+                    )
+
+            # [추가] 중복 아이템 검사
+            seen_item_ids = set()
+            duplicates_found = False
+            for store_item in items_to_update:
+                if store_item.item_id in seen_item_ids:
+                    duplicates_found = True
+                    self.stdout.write(
+                        f"중복 발견: item_id={store_item.item_id}"
+                    )  # [추가]
+                else:
+                    seen_item_ids.add(store_item.item_id)
+            if not duplicates_found:
+                self.stdout.write("items_to_update 리스트에 중복 아이템 없음")  # [추가]
+
+                # [추가] time_offset_map 매칭 확인
+            for store_item in items_to_update:
+                t = time_offset_map.get(store_item.item_id, None)
+                if t is None:
+                    self.stdout.write(
+                        f"time_offset_map에 item_id={store_item.item_id} 없음"
+                    )  # [추가]
+                else:
+                    self.stdout.write(
+                        f"item_id={store_item.item_id}, time_offset_idx={t}"
+                    )  # [추가]
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
                 # self.stdout.write(
                 #     f"item_id={store_item.item_id}, time_offset_idx={t}"
                 # )  # 시간 인덱스 로그 출력
-                cost = menu.menu_cost_price
+                cost = menu.menu_price * 0.7
 
                 max_discount = store_item.max_discount_rate or 0.3
                 p_min = int(menu.menu_price * (1 - max_discount))
@@ -67,24 +97,24 @@ class Command(BaseCommand):
                 best_price = None
                 best_profit = float("-inf")
 
-                p_min_n = p_min / 1000.0
-                p_max_n = p_max / 1000.0
+                # p_min_n = p_min / 1000.0
+                # p_max_n = p_max / 1000.0
 
                 # z_min, z_max로 예상 구매 확률 계산
-                z_min = a + b * p_min_n + gamma * t + w
-                z_max = a + b * p_max_n + gamma * t + w
+                # z_min = a + b * p_min_n + gamma * t + w
+                # z_max = a + b * p_max_n + gamma * t + w
 
-                p_min_prob = sigmoid(z_min)
-                p_max_prob = sigmoid(z_max)
+                # p_min_prob = sigmoid(z_min)
+                # p_max_prob = sigmoid(z_max)
 
                 expected_max_discount = 1 - p_min / menu.menu_price
                 expected_min_discount = 1 - p_max / menu.menu_price
 
-                # 구매 확률 기반 할인율 보정 (숫자는 조정 가능...)
-                if p_min_prob < 0.2:
-                    expected_max_discount = min(expected_max_discount, 0.3)
-                if p_max_prob > 0.8:
-                    expected_min_discount = max(expected_min_discount, 0.05)
+                # # 구매 확률 기반 할인율 보정 (숫자는 조정 가능...)
+                # if p_min_prob < 0.2:
+                #     expected_max_discount = min(expected_max_discount, 0.3)
+                # if p_max_prob > 0.8:
+                #     expected_min_discount = max(expected_min_discount, 0.05)
 
                 for price_candidate in range(
                     p_min, p_max + 1, self.price_grid_interval
@@ -118,8 +148,8 @@ class Command(BaseCommand):
                         f"menu_id={menu.menu_id} item_id={store_item.item_id}: 할인율 변동 없음 - {discount:.4f}, 시간인덱스={t}, 최적가격={best_price}"
                     )
 
-                self.stdout.write(
-                    f"item_id={store_item.item_id}, time_offset_idx={t}, 최적가격={best_price}, 할인율={discount:.4f}"
-                )
+                # self.stdout.write(
+                #     f"item_id={store_item.item_id}, time_offset_idx={t}, 최적가격={best_price}, 할인율={discount:.4f}"
+                # )
 
         self.stdout.write("할인율 시간별 업데이트 완료.")

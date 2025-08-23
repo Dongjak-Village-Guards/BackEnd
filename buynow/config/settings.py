@@ -163,7 +163,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "ko-kr"
 
-TIME_ZONE = "Asia/Seoul"
+TIME_ZONE = "Asia/Seoul"  # TODO 여차하면 UTC로 바꾸기
 
 USE_I18N = True
 
@@ -221,7 +221,7 @@ REST_FRAMEWORK = {
 
 REST_USE_JWT = True
 
-SIMPLE_JWT = {
+SIMPLE_JWT = {  # TODO 배포전 설정 검토 - 유효기간 등
     "ACCESS_TOKEN_LIFETIME": timedelta(
         hours=120
     ),  # 유효기간 120시간 (개발중이라 길게함. 나중에 꼭 줄여놔야해!!)

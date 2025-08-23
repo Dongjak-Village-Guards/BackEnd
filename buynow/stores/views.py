@@ -360,7 +360,7 @@ class NumOfSpacesView(APIView):
         )
 
 
-class StoreSpacesDetailView(APIView):
+class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고르기
     permission_classes = [IsUserRole]  # 인증 필요
 
     @swagger_auto_schema(
