@@ -8,10 +8,12 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db.models import Max, Q
 from django.utils import timezone
+import pytz
 
 # import datetime, time
 import datetime
 from datetime import datetime, timedelta, date, time
+from django.db.models import F, ExpressionWrapper, DateTimeField, Func
 from django.db import transaction
 from config.kakaoapi import get_distance_walktime
 from pricing.utils import create_item_record, safe_create_item_record
@@ -113,7 +115,9 @@ class ReserveList(APIView):
                 item_datetime = datetime.combine(
                     item.item_reservation_date, time(hour=item.item_reservation_time)
                 )
-                if timezone.make_aware(item_datetime) <= timezone.now():
+                utc = pytz.UTC   # utc 기준으로 비교
+                item_datetime_utc = utc.localize(item_datetime)
+                if item_datetime_utc <= timezone.now():
                     return Response(
                         {"error": "이미 지난 시간은 예약할 수 없습니다."}, status=400
                     )
@@ -250,14 +254,15 @@ class ReserveDetail(APIView):
             return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
 
         # 예약 datetime 생성
+        utc = pytz.UTC
         reservation_datetime = datetime.combine(
             slot.slot_reservation_date, datetime.time(hour=slot.slot_reservation_time)
-        )
-        reservation_datetime = timezone.make_aware(reservation_datetime)
-        now = timezone.now()
+        ).replace(tzinfo=utc)
+        # reservation_datetime = timezone.make_aware(reservation_datetime) -> 로컬타임이었던거 옮겨.
+        now_utc = timezone.now() # UTC 로 해서 비교.
 
         # 30분 전인지 확인 - 에러코드 추가
-        if reservation_datetime - now < datetime.timedelta(minutes=30):
+        if reservation_datetime - now_utc < datetime.timedelta(minutes=30):
             return Response(
                 {
                     "errorCode": "CANCELLATION_NOT_ALLOWED",
@@ -302,7 +307,7 @@ class ReserveMe(APIView):
             return Response({"error": "인증이 필요합니다."}, status=401)
 
         # 시간 관련
-        now = timezone.localtime()
+        now = timezone.now() # utc 기준으로
         today = now.date()
         current_hour = now.hour
 
@@ -315,15 +320,16 @@ class ReserveMe(APIView):
                 "store_item__store",
                 "store_item__menu",
                 "store_item__space",
-            )
-            .filter(
-                Q(reservation_slot__slot_reservation_date__gt=today)
-                | Q(
-                    reservation_slot__slot_reservation_date=today,
-                    reservation_slot__slot_reservation_time__gte=current_hour,
+            ).annotate(
+                # DateField + int -> datetime
+                slot_datetime=ExpressionWrapper(
+                    F('reservation_slot__slot_reservation_date') +
+                    Func(F('reservation_slot__slot_reservation_time'), function='INTERVAL', template="%(expressions)s HOUR"), #* timedelta(hours=1), <- 이건 그 orm 에 안맞을수도있어서
+                    output_field=DateTimeField()
                 )
-            )
-            .order_by(
+            ).filter(
+                slot_datetime__gte=now
+            ).order_by(
                 "reservation_slot__slot_reservation_date",
                 "reservation_slot__slot_reservation_time",
             )
@@ -417,12 +423,13 @@ class LikeDetail(APIView):
         time_filter = request.query_params.get("time")
         category_filter = request.query_params.get("store_category")
 
-        # 기본 시간: 현재 시간의 정각
+        # 기본 시간: 현재 시간의 정각 -> 근데 db가 utc 니까 time_filter도 그렇게 바꿔야함.
         if not time_filter:
-            # time_filter = datetime.now().hour
-            time_filter = timezone.localtime().hour
+            time_filter = datetime.now().hour # -> UTC로
+            #time_filter = timezone.localtime().hour
         else:
-            time_filter = int(time_filter)
+            time_filter_kst = int(time_filter)
+            time_filter = (time_filter_kst - 9) % 24  # KST → UTC
 
         # 찜한 매장 가져오기
         user_likes = (
@@ -440,15 +447,15 @@ class LikeDetail(APIView):
             # 업종 필터 적용
             if category_filter and store.store_category != category_filter:
                 continue
-
-            # StoreItem에서 예약 가능 여부 확인
+            
+            today = timezone.now().date() # UTC 기준 <- DB에 있는 date(UTC) 와 비교해야 하므로 KST 로 하면 안됨
+            # StoreItem에서 예약 가능 여부 확인 <- 오늘 거
             items = StoreItem.objects.filter(
-                store=store, item_reservation_time=time_filter, item_stock__gt=0
+                store=store, item_reservation_date = today, item_reservation_time=time_filter, item_stock__gt=0
             ).select_related("menu")
 
             # 모든 space의 slot중 time_filter에 해당하는 거 찾고, 그 slot의 is_reserved가 다 true면 is_available은 false
             # today = date.today()
-            today = timezone.localtime().date()
             is_available = False
 
             spaces = StoreSpace.objects.filter(store=store)
@@ -457,7 +464,7 @@ class LikeDetail(APIView):
                     StoreSlot,
                     space=space,
                     slot_reservation_date=today,
-                    slot_reservation_time=time_filter,
+                    slot_reservation_time=time_filter, # time 값도 utc 기준
                 )
                 if slot.is_reserved == False:
                     is_available = True
@@ -578,11 +585,11 @@ class OwnerReservation(APIView):
                 {"error": "해당하는 스토어를 찾을 수 없습니다."}, status=404
             )
 
-        # today = date.today()
+        today = date.today() # 이것도 날짜는 DB가 UTC 로 저장되어 있으니까, 얘도 UTC 기준으로.
         # tomorrow = today + timedelta(days=1)
-        # now = datetime.now().hour
-        now = timezone.localtime()
-        today = now.date()
+        now = datetime.now().hour # 이것도 UTC 기준으로
+        #now = timezone.localtime()
+        #today = now.date()
         tomorrow = today + timedelta(days=1)
 
         today_spaces_data = []
@@ -632,7 +639,7 @@ class OwnerReservation(APIView):
                 slots_data.append(
                     {
                         "slot_id": slot.slot_id,
-                        "time": slot.slot_reservation_time.strftime("%H:%M"),
+                        "time": time(slot.slot_reservation_time).strftime("%H:%M"),
                         "is_reserved": is_reserved,
                         "reservation_info": reservation_info,
                     }
