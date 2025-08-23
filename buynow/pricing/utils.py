@@ -9,7 +9,6 @@ from datetime import datetime, time
 
 MenuPricingParam = apps.get_model("pricing", "MenuPricingParam")
 
-MenuPricingParam = apps.get_model("pricing", "MenuPricingParam")
 
 
 def sigmoid(x):
