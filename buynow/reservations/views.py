@@ -246,8 +246,14 @@ class ReserveDetail(APIView):
 
         # 예약 시간이 reservation.reservation_slot_id의 예약 날짜+시간
         slot = reservation.reservation_slot
-        if not slot or not slot.slot_reservation_date or not slot.slot_reservation_time:
-            return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
+        #if not slot or not slot.slot_reservation_date or not slot.slot_reservation_time:
+        #    return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
+        if not slot:
+            return Response({"error": "slot이 존재하지않습니다."},status=400)
+        if not slot.slot_reservation_date:
+            return Response({"error":"slot_reservation_date 가 존재하지않음."},status=400)
+        if not slot.slot_reservation_time:
+            return Response({"error":"slot_reservation_time 가 존재하지않음."},status = 400)
 
         # 예약 datetime 생성
         reservation_datetime = datetime.combine(
