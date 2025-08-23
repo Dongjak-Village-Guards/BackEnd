@@ -87,7 +87,7 @@ class Command(BaseCommand):
                 # self.stdout.write(
                 #     f"item_id={store_item.item_id}, time_offset_idx={t}"
                 # )  # 시간 인덱스 로그 출력
-                cost = menu.menu_cost_price
+                cost = menu.menu_price * 0.7
 
                 max_discount = store_item.max_discount_rate or 0.3
                 p_min = int(menu.menu_price * (1 - max_discount))
