@@ -172,7 +172,7 @@ class ReserveList(APIView):
                         {"error": "가격 또는 할인율 정보가 없습니다."}, status=400
                     )
                 discounted_cost = (
-                    price_original - price_original * item.current_discount_rate
+                    price_original * item.current_discount_rate # 원가 * 할인율 = 할인된 금액
                 )
 
                 # 예약 생성
