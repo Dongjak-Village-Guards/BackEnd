@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 from django.core.management.base import BaseCommand
 from django.utils import timezone as dj_timezone
@@ -24,6 +24,7 @@ class Command(BaseCommand):
 
         now = dj_timezone.now()
         today = now.date()
+        tomorrow = today + timedelta(days=1)
         max_time_offset = 143  # 하루 최대 시간 인덱스 (5분 단위, 24*60/5 - 1)
         batch_size = 1000  # 메모리/부하 완화용 배치 크기
 
@@ -41,7 +42,7 @@ class Command(BaseCommand):
             w = menu.dp_weight
 
             queryset = menu.storeitem_set.filter(
-                item_stock=1, item_reservation_date=today
+                item_stock=1, item_reservation_date__range=(today, tomorrow)
             )
 
             items_to_update = []
