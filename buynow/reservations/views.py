@@ -252,7 +252,7 @@ class ReserveDetail(APIView):
             return Response({"error": "slot이 존재하지않습니다."},status=400)
         if not slot.slot_reservation_date:
             return Response({"error":"slot_reservation_date 가 존재하지않음."},status=400)
-        if not slot.slot_reservation_time:
+        if slot.slot_reservation_time is None :
             return Response({"error":"slot_reservation_time 가 존재하지않음."},status = 400)
 
         # 예약 datetime 생성
