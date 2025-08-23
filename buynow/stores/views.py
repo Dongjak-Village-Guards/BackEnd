@@ -506,13 +506,24 @@ class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고�
         spaces = StoreSpace.objects.filter(store=store)
 
         for space in spaces:
-            # 최대 할인율 계산
+            # 1) 재고가 1 이상인 아이템 중 최대 할인율 구하기
             max_discount = StoreItem.objects.filter(
                 store=store,
                 space=space,
                 item_reservation_date=target_date,
                 item_reservation_time=target_time,
-            ).aggregate(Max("max_discount_rate"))["max_discount_rate__max"]
+                item_stock__gt=0,  # 재고 1 이상
+            ).aggregate(Max("current_discount_rate"))["current_discount_rate__max"]
+
+            # 2) 만약 재고 1 이상인 아이템이 없으면, 재고 0인 아이템 중 최대 할인율 구하기
+            if max_discount is None:
+                max_discount = StoreItem.objects.filter(
+                    store=store,
+                    space=space,
+                    item_reservation_date=target_date,
+                    item_reservation_time=target_time,
+                    item_stock=0,  # 재고 0
+                ).aggregate(Max("current_discount_rate"))["current_discount_rate__max"]
 
             max_discount_percent = int(max_discount * 100) if max_discount else 0
 
@@ -1426,23 +1437,25 @@ class OwnerSlot(APIView):
         }
         return Response(response_data)"""
 
+
 class OwnerStatic(APIView):
     permission_classes = [IsOwnerRole]
 
     def get(self, request, store_id, day):
-        
+
         try:
-            store = get_object_or_404(Store, store_id = store_id)
+            store = get_object_or_404(Store, store_id=store_id)
         except Store.DoesNotExist:
-            return Response({"error":"Store not found"}, status = 404)
-        
+            return Response({"error": "Store not found"}, status=404)
+
         user = request.user
         if store.store_owner != user:
-            return Response({"error" : "가게 주인이 아닙니다."}, status = 403)
+            return Response({"error": "가게 주인이 아닙니다."}, status=403)
 
-
-        if day not in [7,30]:
-            return Response({"error":"Invalid 'day' parameter. Must be 7 or 30."}, status = 400)
+        if day not in [7, 30]:
+            return Response(
+                {"error": "Invalid 'day' parameter. Must be 7 or 30."}, status=400
+            )
 
         # store_id 로 해당 store의 menu들 다 가져와서 menu들의 리스트 가져오기
         store_menus = StoreMenu.objects.filter(store=store)
@@ -1454,18 +1467,24 @@ class OwnerStatic(APIView):
         # day가 7인지 30인지에 따라 최근 day일 reservation 정보 필터해서 현재 리스트 전부 가져오기.
         today = datetime.now().date()
         current_period_start = today - timedelta(days=day)
-        past_period_start = today - timedelta(days=day*2)
+        past_period_start = today - timedelta(days=day * 2)
 
         current_reservations = Reservation.objects.filter(
             store_item__store=store,
-            reservation_slot__slot_reservation_date__range=[current_period_start, today]
-        ).select_related('store_item__menu', 'reservation_slot')
+            reservation_slot__slot_reservation_date__range=[
+                current_period_start,
+                today,
+            ],
+        ).select_related("store_item__menu", "reservation_slot")
 
         # day 에 따라 지난 통계 도 가져오기 (과거 리스트)
         past_reservations = Reservation.objects.filter(
             store_item__store=store,
-            reservation_slot__slot_reservation_date__range=[past_period_start, current_period_start - timedelta(days=1)]
-        ).select_related('store_item__menu', 'reservation_slot')
+            reservation_slot__slot_reservation_date__range=[
+                past_period_start,
+                current_period_start - timedelta(days=1),
+            ],
+        ).select_related("store_item__menu", "reservation_slot")
 
         # 통계 초기화
         current_total_reservations_count = 0
@@ -1476,16 +1495,16 @@ class OwnerStatic(APIView):
         for res in current_reservations:
             current_total_reservations_count += 1
             current_total_discount_amount += res.reservation_cost
-            
+
             menu = res.store_item.menu
             if menu:
                 # 정가(total_price) 계산
                 current_total_price += menu.menu_price
-                
+
                 # 메뉴별 예약 횟수
                 if menu.menu_name in menu_counts:
                     menu_counts[menu.menu_name] += 1
-            
+
             # 시간대별 예약 횟수
             reservation_hour = res.reservation_slot.slot_reservation_time
             if 0 <= reservation_hour < 24:
@@ -1493,9 +1512,21 @@ class OwnerStatic(APIView):
 
         # 6. 과거 리스트의 통계 계산
         past_total_reservations_count = past_reservations.count()
-        past_total_discount_amount = past_reservations.aggregate(Sum('reservation_cost'))['reservation_cost__sum'] or 0
-        past_total_price = sum(res.store_item.menu.menu_price for res in past_reservations if res.store_item.menu) or 0
-        
+        past_total_discount_amount = (
+            past_reservations.aggregate(Sum("reservation_cost"))[
+                "reservation_cost__sum"
+            ]
+            or 0
+        )
+        past_total_price = (
+            sum(
+                res.store_item.menu.menu_price
+                for res in past_reservations
+                if res.store_item.menu
+            )
+            or 0
+        )
+
         # 7. 최종 수익(total_revenue) 계산
         current_total_revenue = current_total_price - current_total_discount_amount
         past_total_revenue = past_total_price - past_total_discount_amount
@@ -1507,26 +1538,34 @@ class OwnerStatic(APIView):
             return (current - past) / past * 100
 
         revenue_delta = calculate_delta(current_total_revenue, past_total_revenue)
-        reservations_delta = calculate_delta(current_total_reservations_count, past_total_reservations_count)
+        reservations_delta = calculate_delta(
+            current_total_reservations_count, past_total_reservations_count
+        )
 
         # 메뉴 통계 딕셔너리를 리스트로 변환
-        menu_statistics_list = [{"name": name, "count": count} for name, count in menu_counts.items()]
+        menu_statistics_list = [
+            {"name": name, "count": count} for name, count in menu_counts.items()
+        ]
 
         # count를 기준으로 내림차순 정렬 (큰 값부터)
-        menu_statistics_list_sorted = sorted(menu_statistics_list, key=lambda x: x['count'], reverse=True)
+        menu_statistics_list_sorted = sorted(
+            menu_statistics_list, key=lambda x: x["count"], reverse=True
+        )
 
         # time index 랑 당시 할인율 보내기 (7일, 30일 <- created_at으로 확인)
         # 해당 가게의 store_id 로 item id 다 찾고,
         # item_id 로 최근 7/30 일간 (created_at) 생성된 ItemRecord 가져오기 time_offset_idx 랑 record_discount_rate 만.
         # 리스트에 담아서 주기
         # --- 9. time_offset_idx와 record_discount_rate 데이터 구성 --- #
-        store_item_ids = StoreItem.objects.filter(store=store).values_list("item_id", flat=True)
+        store_item_ids = StoreItem.objects.filter(store=store).values_list(
+            "item_id", flat=True
+        )
 
         # 최근 day일 동안 생성된 ItemRecord 가져오기
         record_start_date = today - timedelta(days=day)
         item_records = ItemRecord.objects.filter(
             store_item_id__in=store_item_ids,
-            created_at__gte=record_start_date  # BaseModel 상속받았으니 created_at 존재한다고 가정
+            created_at__gte=record_start_date,  # BaseModel 상속받았으니 created_at 존재한다고 가정
         ).values("time_offset_idx", "record_discount_rate", "created_at")
 
         time_dix_discount_rate = [
@@ -1538,27 +1577,36 @@ class OwnerStatic(APIView):
         ]
 
         # 이 가게에 최대 할인율 구하기
-        max_discount_rate = StoreItem.objects.filter(store=store).aggregate(Max("max_discount_rate"))["max_discount_rate__max"] or 0
+        max_discount_rate = (
+            StoreItem.objects.filter(store=store).aggregate(Max("max_discount_rate"))[
+                "max_discount_rate__max"
+            ]
+            or 0
+        )
 
         # JSON 응답 구성
         response_data = {
             "total_revenue": {
                 "value": current_total_revenue,
-                "delta": round(revenue_delta, 2) if isinstance(revenue_delta, (int, float)) else revenue_delta
+                "delta": (
+                    round(revenue_delta, 2)
+                    if isinstance(revenue_delta, (int, float))
+                    else revenue_delta
+                ),
             },
             "total_reservations_count": {
                 "value": current_total_reservations_count,
-                "delta": round(reservations_delta, 2) if isinstance(reservations_delta, (int, float)) else reservations_delta
+                "delta": (
+                    round(reservations_delta, 2)
+                    if isinstance(reservations_delta, (int, float))
+                    else reservations_delta
+                ),
             },
-            "total_discount_amount":{
-                "value": current_total_discount_amount
-            },
-            "max_discount_rate":{
-                "value" : max_discount_rate
-            },
-            "time_idx_and_discount_rate" : time_dix_discount_rate,
-            "menu_statistics": menu_statistics_list_sorted, 
-            "hourly_statistics": hourly_counts
+            "total_discount_amount": {"value": current_total_discount_amount},
+            "max_discount_rate": {"value": max_discount_rate},
+            "time_idx_and_discount_rate": time_dix_discount_rate,
+            "menu_statistics": menu_statistics_list_sorted,
+            "hourly_statistics": hourly_counts,
         }
 
         return Response(response_data)
@@ -1572,7 +1620,7 @@ class OwnerStatic(APIView):
         ## item 참고해서, 정가를 total_price 에 넣기
         ## item 참고해서, menu 알아내고, 그 menu 리스트에 해당하면 +1 하기
         ## 그리고 reservation의 slot 참고해서, 해당 시간(0~23) 리스트에 +1 더하기
-        
+
         # 그렇게 다 하면, total_price(정가) - total_discount_amount(할인한 가격) 를 빼서, 최종 판매 가격인 total_revenue의 value 에 넣기.
 
         # 그러면 이제 과거 리스트에서 얻어낸 total_revenue의 value와 현재 리스트의 것 비교해서 상승룰(delta) 구하기
