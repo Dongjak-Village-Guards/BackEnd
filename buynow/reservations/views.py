@@ -564,7 +564,9 @@ class OwnerReservation(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        
+        store = get_object_or_404(Store, store_id=store_id)
+        if store.store_owner != user:
+            return Response({"error":"가게 주인이 아닙니다."}, status = 403)
 
         # store_id에 해당하는 모든 space 정보 가져오기
         try:
