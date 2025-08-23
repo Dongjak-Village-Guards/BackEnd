@@ -67,24 +67,24 @@ class Command(BaseCommand):
                 best_price = None
                 best_profit = float("-inf")
 
-                p_min_n = p_min / 1000.0
-                p_max_n = p_max / 1000.0
+                # p_min_n = p_min / 1000.0
+                # p_max_n = p_max / 1000.0
 
                 # z_min, z_max로 예상 구매 확률 계산
-                z_min = a + b * p_min_n + gamma * t + w
-                z_max = a + b * p_max_n + gamma * t + w
+                # z_min = a + b * p_min_n + gamma * t + w
+                # z_max = a + b * p_max_n + gamma * t + w
 
-                p_min_prob = sigmoid(z_min)
-                p_max_prob = sigmoid(z_max)
+                # p_min_prob = sigmoid(z_min)
+                # p_max_prob = sigmoid(z_max)
 
                 expected_max_discount = 1 - p_min / menu.menu_price
                 expected_min_discount = 1 - p_max / menu.menu_price
 
-                # 구매 확률 기반 할인율 보정 (숫자는 조정 가능...)
-                if p_min_prob < 0.2:
-                    expected_max_discount = min(expected_max_discount, 0.3)
-                if p_max_prob > 0.8:
-                    expected_min_discount = max(expected_min_discount, 0.05)
+                # # 구매 확률 기반 할인율 보정 (숫자는 조정 가능...)
+                # if p_min_prob < 0.2:
+                #     expected_max_discount = min(expected_max_discount, 0.3)
+                # if p_max_prob > 0.8:
+                #     expected_min_discount = max(expected_min_discount, 0.05)
 
                 for price_candidate in range(
                     p_min, p_max + 1, self.price_grid_interval
