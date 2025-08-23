@@ -1511,6 +1511,9 @@ class OwnerStatic(APIView):
             for rec in item_records
         ]
 
+        # 이 가게에 최대 할인율 구하기
+        max_discount_rate = StoreItem.objects.filter(store=store).aggregate(Max("max_discount_rate"))["max_discount_rate__max"] or 0
+
         # JSON 응답 구성
         response_data = {
             "total_revenue": {
@@ -1523,6 +1526,9 @@ class OwnerStatic(APIView):
             },
             "total_discount_amount":{
                 "value": current_total_discount_amount
+            },
+            "max_discount_rate":{
+                "value" : max_discount_rate
             },
             "time_idx_and_discount_rate" : time_dix_discount_rate,
             "menu_statistics": menu_statistics_list_sorted, 
