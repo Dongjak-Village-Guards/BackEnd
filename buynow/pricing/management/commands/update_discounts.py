@@ -24,7 +24,7 @@ class Command(BaseCommand):
 
         now = dj_timezone.now()
         today = now.date()
-        max_time_offset = 18  # 3시간 이내 (10분단위 인덱스 최대치)
+        max_time_offset = 143  # 하루 최대 시간 인덱스 (5분 단위, 24*60/5 - 1)
         batch_size = 1000  # 메모리/부하 완화용 배치 크기
 
         for menu in menus:
@@ -52,6 +52,35 @@ class Command(BaseCommand):
                 if t is not None and t <= max_time_offset:
                     items_to_update.append(store_item)
                     time_offset_map[store_item.item_id] = t
+                    self.stdout.write(
+                        f"DEBUG: item_id={store_item.item_id}, time_offset_idx={t}"
+                    )
+
+            # [추가] 중복 아이템 검사
+            seen_item_ids = set()
+            duplicates_found = False
+            for store_item in items_to_update:
+                if store_item.item_id in seen_item_ids:
+                    duplicates_found = True
+                    self.stdout.write(
+                        f"중복 발견: item_id={store_item.item_id}"
+                    )  # [추가]
+                else:
+                    seen_item_ids.add(store_item.item_id)
+            if not duplicates_found:
+                self.stdout.write("items_to_update 리스트에 중복 아이템 없음")  # [추가]
+
+                # [추가] time_offset_map 매칭 확인
+            for store_item in items_to_update:
+                t = time_offset_map.get(store_item.item_id, None)
+                if t is None:
+                    self.stdout.write(
+                        f"time_offset_map에 item_id={store_item.item_id} 없음"
+                    )  # [추가]
+                else:
+                    self.stdout.write(
+                        f"item_id={store_item.item_id}, time_offset_idx={t}"
+                    )  # [추가]
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
@@ -118,8 +147,8 @@ class Command(BaseCommand):
                         f"menu_id={menu.menu_id} item_id={store_item.item_id}: 할인율 변동 없음 - {discount:.4f}, 시간인덱스={t}, 최적가격={best_price}"
                     )
 
-                self.stdout.write(
-                    f"item_id={store_item.item_id}, time_offset_idx={t}, 최적가격={best_price}, 할인율={discount:.4f}"
-                )
+                # self.stdout.write(
+                #     f"item_id={store_item.item_id}, time_offset_idx={t}, 최적가격={best_price}, 할인율={discount:.4f}"
+                # )
 
         self.stdout.write("할인율 시간별 업데이트 완료.")
