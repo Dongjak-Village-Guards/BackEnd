@@ -10,8 +10,8 @@ from pricing.utils import sigmoid
 class Command(BaseCommand):
     help = "메뉴별 동적 할인율 파라미터 학습"
 
-    lr = 0.02
-    epochs = 10
+    lr = 0.002
+    epochs = 5
 
     def gamma_to_gamma_tilde(self, gamma):
         val = math.exp(-gamma) - 1
