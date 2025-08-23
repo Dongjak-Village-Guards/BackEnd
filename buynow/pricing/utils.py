@@ -1,4 +1,4 @@
-#from pricing.models import MenuPricingParam
+# from pricing.models import MenuPricingParam
 from django.apps import apps
 from stores.models import StoreItem
 from records.models import ItemRecord
@@ -6,7 +6,8 @@ from django.utils import timezone
 import math
 from datetime import datetime, time
 
-MenuPricingParam = apps.get_model("pricing","MenuPricingParam")
+MenuPricingParam = apps.get_model("pricing", "MenuPricingParam")
+
 
 def sigmoid(x):
     if x < -30:
@@ -106,18 +107,23 @@ def update_discount_param(store_item, sold=1):
 
 
 def calculate_time_offset_idx(store_item, current_time):
+    # current_time을 한국 시간(KST) 기준으로 변환 후 naive datetime으로 만듦
+    current_naive = timezone.localtime(current_time).replace(tzinfo=None)
+
+    # DB 저장된 정수 시(hour)로 naive datetime 생성 (분, 초는 0)
     reservation_datetime = datetime.combine(
-        store_item.item_reservation_date, time(store_item.item_reservation_time)
+        store_item.item_reservation_date,
+        time(hour=store_item.item_reservation_time, minute=0, second=0),
     )
 
-    if reservation_datetime.tzinfo is None:
-        reservation_datetime = timezone.make_aware(
-            reservation_datetime, timezone=current_time.tzinfo
-        )
+    diff_minutes = (reservation_datetime - current_naive).total_seconds() / 60
 
-    diff_minutes = (reservation_datetime - current_time).total_seconds() / 60
-    idx = int(max(0, min(18, diff_minutes // 10)))
-    return idx
+    if diff_minutes <= 0:
+        idx = 0
+    else:
+        idx = int((diff_minutes - 1) // 10) + 1
+
+    return max(0, idx)
 
 
 # from pricing.models import MenuPricingParam
