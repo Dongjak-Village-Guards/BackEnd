@@ -172,7 +172,7 @@ class ReserveList(APIView):
                         {"error": "가격 또는 할인율 정보가 없습니다."}, status=400
                     )
                 discounted_cost = (
-                    price_original - price_original * item.current_discount_rate
+                    price_original * item.current_discount_rate # 원가 * 할인율 = 할인된 금액
                 )
 
                 # 예약 생성
@@ -246,18 +246,24 @@ class ReserveDetail(APIView):
 
         # 예약 시간이 reservation.reservation_slot_id의 예약 날짜+시간
         slot = reservation.reservation_slot
-        if not slot or not slot.slot_reservation_date or not slot.slot_reservation_time:
-            return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
+        #if not slot or not slot.slot_reservation_date or not slot.slot_reservation_time:
+        #    return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
+        if not slot:
+            return Response({"error": "slot이 존재하지않습니다."},status=400)
+        if not slot.slot_reservation_date:
+            return Response({"error":"slot_reservation_date 가 존재하지않음."},status=400)
+        if slot.slot_reservation_time is None :
+            return Response({"error":"slot_reservation_time 가 존재하지않음."},status = 400)
 
         # 예약 datetime 생성
         reservation_datetime = datetime.combine(
-            slot.slot_reservation_date, datetime.time(hour=slot.slot_reservation_time)
+            slot.slot_reservation_date, time(hour=slot.slot_reservation_time)
         )
         reservation_datetime = timezone.make_aware(reservation_datetime)
         now = timezone.now()
 
         # 30분 전인지 확인 - 에러코드 추가
-        if reservation_datetime - now < datetime.timedelta(minutes=30):
+        if reservation_datetime - now < timedelta(minutes=30):
             return Response(
                 {
                     "errorCode": "CANCELLATION_NOT_ALLOWED",
@@ -559,14 +565,14 @@ class OwnerReservation(APIView):
     permission_classes = [IsOwnerRole]
 
     # 예약 조회
-    def get(self, request):
+    def get(self, request, store_id):
         user = request.user
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        store_id = request.data.get("store_id")
-        if not store_id:
-            return Response({"error": "store_id가 필요합니다."}, status=400)
+        store = get_object_or_404(Store, store_id=store_id)
+        if store.store_owner != user:
+            return Response({"error":"가게 주인이 아닙니다."}, status = 403)
 
         # store_id에 해당하는 모든 space 정보 가져오기
         try:
@@ -627,7 +633,7 @@ class OwnerReservation(APIView):
                 slots_data.append(
                     {
                         "slot_id": slot.slot_id,
-                        "time": slot.slot_reservation_time.strftime("%H:%M"),
+                        "time": time(slot.slot_reservation_time).strftime("%H:%M"),
                         "is_reserved": is_reserved,
                         "reservation_info": reservation_info,
                     }
