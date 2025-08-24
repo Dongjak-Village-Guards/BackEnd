@@ -31,7 +31,7 @@ class Command(BaseCommand):
         now = dj_timezone.now()
         today = now.date()
         tomorrow = today + timedelta(days=1)
-        max_time_offset = 287  # 이틀 최대 시간 인덱스 (10분 단위)
+        max_time_offset = 143  # 하루 최대 시간 인덱스 (10분 단위)
 
         batch_size = 1000  # 배치 크기
 
