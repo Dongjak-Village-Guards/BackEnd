@@ -88,7 +88,7 @@ class Command(BaseCommand):
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
-                t_scaled = t / 100.0  # 학습 코드와 동일한 시간 인덱스 스케일링
+                t_scaled = t / 10.0  # 학습 코드와 동일한 시간 인덱스 스케일링
 
                 cost = menu.menu_price * 0.7
 

@@ -92,8 +92,8 @@ class Command(BaseCommand):
                 # 원가 반영 할인율 학습 변수 (가격에서 원가 차이)
                 p_n = (price - cost) / 1000.0
 
-                # 시간 인덱스 스케일링 (예: 100으로 나눠서 감쇠)
-                t_scaled = t / 100.0
+                # 시간 인덱스 스케일링 (예: 10으로 나눠서 감쇠)
+                t_scaled = t / 10.0
 
                 z = a + b * p_n + gamma * t_scaled + w
                 p = sigmoid(z)
