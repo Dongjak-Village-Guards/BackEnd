@@ -3,12 +3,12 @@ import math
 from django.core.management.base import BaseCommand
 from stores.models import StoreMenu, StoreItem
 from records.models import ItemRecord
-from pricing.models import MenuPricingParam
+from pricing.models import MenuPricingParam, GlobalPricingParam
 from pricing.utils import sigmoid
 
 
 class Command(BaseCommand):
-    help = "메뉴별 동적 할인율 파라미터 학습"
+    help = "메뉴별 동적 할인율 파라미터 학습 (전역 파라미터 사용)"
 
     lr = 0.002
     epochs = 5
@@ -21,92 +21,113 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         self.stdout.write("할인율 파라미터 학습 시작...")
+
+        # GlobalPricingParam 오브젝트 하나만 가져오기 (없으면 생성)
+        global_param, _ = GlobalPricingParam.objects.get_or_create(id=1)
+        self.stdout.write(
+            f"전역 파라미터 - beta0: {global_param.beta0}, alpha: {global_param.alpha}, gamma_tilde: {global_param.gamma_tilde}"
+        )
+
         menus = StoreMenu.objects.all()
         if not menus:
             self.stdout.write("StoreMenu 데이터가 없습니다.")
             return
 
+        a = global_param.beta0
+        b = global_param.alpha
+
+        # 기존 gamma_tilde → gamma 역변환 (기본값 -1.0)
+        if global_param.gamma_tilde is not None:
+            gamma = -math.log(math.exp(global_param.gamma_tilde) + 1)
+        else:
+            gamma = -1.0
+
+        # 메뉴별 가중치 업데이트는 계속 개별로 하되 학습 파라미터는 전역 a,b,gamma만 업데이트
+
+        # 전체 메뉴별 아이템 아이디 수집 (모든 메뉴 합침)
+        all_item_ids = []
         for menu in menus:
-            self.stdout.write(f"메뉴 [{menu.menu_name}] 학습 시작")
-            param, _ = MenuPricingParam.objects.get_or_create(menu=menu)
+            all_item_ids.extend(menu.storeitem_set.values_list("item_id", flat=True))
+        # 중복 제거
+        all_item_ids = list(set(all_item_ids))
+        self.stdout.write(f"전체 아이템 수 (중복 제거 후): {len(all_item_ids)}")
 
-            a = param.beta0
-            b = param.alpha
+        # 학습 데이터 쿼리: 모든 메뉴 아이템 레코드 필터링 (미학습)
+        queryset = ItemRecord.objects.filter(
+            store_item_id__in=all_item_ids, is_learned=False
+        )
 
-            # 기존 gamma_tilde → gamma 역변환 (gamma_tilde가 없으면 기본값 -1.0)
-            if param.gamma_tilde is not None:
-                gamma = -math.log(math.exp(param.gamma_tilde) + 1)
-            else:
-                gamma = -1.0
+        record_count = queryset.count()
+        if record_count == 0:
+            self.stdout.write("신규 학습 데이터 없음, 건너뜀")
+            return
+        elif record_count < 10:
+            self.stdout.write(f"학습 데이터 부족 (신규 {record_count} 건)")
 
-            w = menu.dp_weight
+        # 최신 100개 데이터만 사용
+        records = queryset.order_by("-created_at")[:100]
 
-            item_ids = menu.storeitem_set.values_list("item_id", flat=True)
+        store_items = StoreItem.objects.filter(
+            item_id__in=[r.store_item_id for r in records]
+        )
+        store_item_map = {item.item_id: item for item in store_items}
 
-            queryset = ItemRecord.objects.filter(
-                store_item_id__in=item_ids, is_learned=False
-            )
+        # 메뉴별 dp_weight 변동 사항 저장용 딕셔너리 추가
+        menu_weight_updates = {}
 
-            record_count = queryset.count()
-            if record_count == 0:
-                self.stdout.write(f"{menu.menu_name}: 신규 학습 데이터 없음, 건너뜀")
-                continue
-            elif record_count < 10:
+        # 경사 하강법으로 전역 파라미터 업데이트
+        for _ in range(self.epochs):
+            for r in records:
+                store_item = store_item_map.get(r.store_item_id)
+                if not store_item:
+                    continue
+
+                sold = r.sold
+                w = store_item.menu.dp_weight  # 메뉴별 가중치는 그대로 사용
+                t = r.time_offset_idx  # 시간 인덱스 사용
+
+                price = r.record_item_price * (1 - r.record_discount_rate)
+                p_n = price / 1000.0
+
+                z = a + b * p_n + gamma * t + w
+                p = sigmoid(z)
+
+                weight = 2.0 if sold == 1 else 1.0
+                delta = (p - sold) * weight
+
+                a -= self.lr * delta
+                b -= self.lr * delta * p_n
+                gamma -= self.lr * delta * t
+
+                # dp_weight 업데이트 추가
+                w -= self.lr * delta
+
+                # 변경된 weight를 저장할 메뉴별 딕셔너리에 반영
+                menu_id = store_item.menu.menu_id
+                menu_weight_updates[menu_id] = w
+
+        # 학습된 전역 파라미터 저장
+        global_param.beta0 = a
+        global_param.alpha = b
+        global_param.gamma_tilde = self.gamma_to_gamma_tilde(gamma)
+        global_param.save()
+
+        # 업데이트된 메뉴별 dp_weight 저장 [수정]
+        for menu in menus:
+            if menu.menu_id in menu_weight_updates:
+                new_w = menu_weight_updates[menu.menu_id]
+                menu.dp_weight = new_w
+                menu.save(update_fields=["dp_weight", "updated_at"])
                 self.stdout.write(
-                    f"{menu.menu_name}: 학습 데이터 부족 (신규 {record_count}건)"
+                    f"[메뉴: {menu.menu_name}] dp_weight 업데이트: {new_w:.6f}"
                 )
 
-            # 최신 100개 데이터만 학습 데이터로 사용
-            records = queryset.order_by("-created_at")[:100]
+        # 학습 완료된 레코드 is_learned=True 처리
+        record_ids = [r.record_id for r in records]
+        ItemRecord.objects.filter(record_id__in=record_ids).update(is_learned=True)
 
-            store_items = StoreItem.objects.filter(
-                item_id__in=[r.store_item_id for r in records]
-            )
-            store_item_map = {item.item_id: item for item in store_items}
-
-            for _ in range(self.epochs):
-                for r in records:
-                    store_item = store_item_map.get(r.store_item_id)
-                    if not store_item:
-                        continue
-
-                    sold = r.sold
-                    w = store_item.menu.dp_weight  # 현재 StoreMenu dp_weight 재사용
-                    t = r.time_offset_idx  # 과거 기록의 시간 인덱스 그대로 사용
-
-                    price = r.record_item_price * (1 - r.record_discount_rate)
-                    p_n = price / 1000.0
-
-                    z = a + b * p_n + gamma * t + w
-                    p = sigmoid(z)
-
-                    # 여기서 sold가 1(팔림)이면 가중치 2.0, 아니면 1.0  <- 이 아래 2줄 살리고 그 아래 줄을 주석처리하던가...
-                    weight = 2.0 if sold == 1 else 1.0
-                    delta = (p - sold) * weight
-                    # delta = p - sold
-
-                    # 파라미터 경사 하강법 업데이트
-                    a -= self.lr * delta
-                    b -= self.lr * delta * p_n
-                    gamma -= self.lr * delta * t
-                    w -= self.lr * delta
-
-            # 파라미터 저장
-            param.beta0 = a
-            param.alpha = b
-            param.gamma_tilde = self.gamma_to_gamma_tilde(gamma)
-            param.save()
-
-            # 메뉴 가중치 업데이트
-            menu.dp_weight = w
-            menu.save(update_fields=["dp_weight", "updated_at"])
-
-            # 학습 완료된 레코드 is_learned=True 처리
-            record_ids = [r.record_id for r in records]
-            ItemRecord.objects.filter(record_id__in=record_ids).update(is_learned=True)
-
-            self.stdout.write(
-                f"{menu.menu_name} 학습 완료 - beta0(a): {a:.4f}, alpha(b): {b:.4f}, gamma_tilde: {param.gamma_tilde:.4f}, dp_weight(w): {w:.4f}"
-            )
+        self.stdout.write(
+            f"학습 완료 - beta0(a): {a:.4f}, alpha(b): {b:.4f}, gamma_tilde: {global_param.gamma_tilde:.4f}"
+        )
 
         self.stdout.write("할인율 파라미터 학습 종료.")
