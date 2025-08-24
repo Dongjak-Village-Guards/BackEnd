@@ -3,10 +3,7 @@ import math
 from django.core.management.base import BaseCommand
 from django.utils import timezone as dj_timezone
 from stores.models import StoreMenu
-from pricing.models import (
-    MenuPricingParam,
-    GlobalPricingParam,
-)
+from pricing.models import GlobalPricingParam
 from pricing.utils import sigmoid, calculate_time_offset_idx
 
 
@@ -21,7 +18,6 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write("할인율 시간별 업데이트 시작...")
 
-        # 전역 파라미터 한 세트 가져오기
         try:
             param = GlobalPricingParam.objects.get(id=1)
         except GlobalPricingParam.DoesNotExist:
@@ -33,7 +29,7 @@ class Command(BaseCommand):
         tomorrow = today + timedelta(days=1)
         max_time_offset = 143  # 하루 최대 시간 인덱스 (10분 단위)
 
-        batch_size = 1000  # 배치 크기
+        batch_size = 1000
 
         a, b = param.beta0, param.alpha
         gamma = self.gamma_tilde_to_gamma(param.gamma_tilde)
@@ -64,7 +60,7 @@ class Command(BaseCommand):
                         f"DEBUG: item_id={store_item.item_id}, time_offset_idx={t}"
                     )
 
-            # 중복 검사 코드 유지
+            # 중복 검사 유지
             seen_item_ids = set()
             duplicates_found = False
             for store_item in items_to_update:
@@ -90,6 +86,8 @@ class Command(BaseCommand):
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
+                t_scaled = t / 10.0  # 학습 코드와 동일한 시간 인덱스 스케일링
+
                 cost = menu.menu_price * 0.7
 
                 max_discount = store_item.max_discount_rate or 0.3
@@ -105,8 +103,9 @@ class Command(BaseCommand):
                 for price_candidate in range(
                     p_min, p_max + 1, self.price_grid_interval
                 ):
-                    p_n = price_candidate / 1000.0
-                    z = a + b * p_n + gamma * t + w
+                    # p_n 계산에 원가 반영하여 학습과 일치
+                    p_n = (price_candidate - cost) / 1000.0
+                    z = a + b * p_n + gamma * t_scaled + w
                     p = sigmoid(z)
                     profit = p * price_candidate - cost
                     if profit > best_profit:
