@@ -32,7 +32,7 @@ class Command(BaseCommand):
 
         batch_size = 1000
 
-        a, b = param.beta0, param.alpha
+        a, b = param.beta0, (param.alpha) * -1
         # 변경! gamma_tilde 값을 직접 감마로 사용
         gamma = param.gamma_tilde
 
