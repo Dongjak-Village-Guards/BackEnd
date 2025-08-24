@@ -57,9 +57,9 @@ class Command(BaseCommand):
                 if t is not None and t <= max_time_offset:
                     items_to_update.append(store_item)
                     time_offset_map[store_item.item_id] = t
-                    self.stdout.write(
-                        f"DEBUG: item_id={store_item.item_id}, time_offset_idx={t}"
-                    )
+                    # self.stdout.write(
+                    #     f"DEBUG: item_id={store_item.item_id}, time_offset_idx={t}"
+                    # )
 
             # 중복 검사 유지
             seen_item_ids = set()
