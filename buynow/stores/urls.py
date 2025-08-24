@@ -7,7 +7,7 @@ from .views import StoreSingleSpaceDetailView
 from .views import StoreItemDetailView
 
 from .views import view_func
-from .views import MakeAddress
+from .views import MakeAddress, MakeAllCoordinates, MakeOneCoordinate
 from .views import OwnerStore, OwnerStatic
 
 urlpatterns = [
@@ -41,6 +41,10 @@ urlpatterns = [
 
     # 가짜 주소 관련
     path('cau/', MakeAddress.as_view(), name="change_to_cau"),
+
+    # StoreCoordinate 테이블 생성 관련
+    path('coordinate/', MakeAllCoordinates.as_view(), name="make_coordinates_of_all_stores"),
+    path('coordinate/<int:store_id>/', MakeOneCoordinate.as_view(), name="make_coordinates_of_store"),
 
     # 공급자 api 관련
     path('me/owner/', OwnerStore.as_view(), name = "owner_store_join_or_get"),
