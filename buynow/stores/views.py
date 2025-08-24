@@ -185,7 +185,7 @@ class StoreListView(APIView):
         
         # 각 가게별로 최대 할인 아이템 선택
         ranked_items_qs = filtered_items_qs.annotate(
-            discount_amount=ExpressionWrapper(F("menu__menu_price") * F("max_discount_rate"), output_field=FloatField())
+            discount_amount=ExpressionWrapper(F("menu__menu_price") * F("current_discount_rate"), output_field=FloatField()) # max -> current
         ).annotate(
             rank=Window(
                 expression=RowNumber(),
@@ -239,11 +239,11 @@ class StoreListView(APIView):
                     "store_image_url": store.store_image_url,
                     "menu_name": item.menu.menu_name,
                     "menu_id": item.menu.menu_id,
-                    "max_discount_rate": int(item.max_discount_rate * 100),
+                    "max_discount_rate": int(item.current_discount_rate * 100), # max -> current
                     "max_discount_menu": item.menu.menu_name,
                     "max_discount_price_origin": item.menu.menu_price,
                     "max_discount_price": int(
-                        item.menu.menu_price * (1 - item.max_discount_rate)
+                        item.menu.menu_price * (1 - item.current_discount_rate) # max -> current
                     ),
                     "is_liked": is_liked,
                     "liked_id": liked_id,
