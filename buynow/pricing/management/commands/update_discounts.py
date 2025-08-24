@@ -58,9 +58,6 @@ class Command(BaseCommand):
                 if t is not None and t <= max_time_offset:
                     items_to_update.append(store_item)
                     time_offset_map[store_item.item_id] = t
-                    # self.stdout.write(
-                    #     f"DEBUG: item_id={store_item.item_id}, time_offset_idx={t}"
-                    # )
 
             # 중복 검사 유지
             seen_item_ids = set()
@@ -82,15 +79,13 @@ class Command(BaseCommand):
                         f"time_offset_map에 item_id={store_item.item_id} 없음"
                     )
                 else:
-                    self.stdout.write(
-                        f"item_id={store_item.item_id}, time_offset_idx={t}"
-                    )
+                    pass  # 정상적으로 매핑됨
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
                 t_scaled = t / 10.0  # 학습 코드와 동일한 시간 인덱스 스케일링
 
-                cost = menu.menu_price * 0.7
+                cost = menu.menu_price * 0.6
 
                 max_discount = store_item.max_discount_rate or 0.3
                 p_min = int(menu.menu_price * (1 - max_discount))

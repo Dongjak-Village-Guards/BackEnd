@@ -13,12 +13,6 @@ class Command(BaseCommand):
     lr = 0.002
     epochs = 5
 
-    # def gamma_to_gamma_tilde(self, gamma):
-    #     val = math.exp(-gamma) - 1
-    #     if val <= 0:
-    #         val = 1e-8
-    #     return math.log(val)
-
     def handle(self, *args, **kwargs):
         self.stdout.write("할인율 파라미터 학습 시작...")
 
@@ -38,9 +32,9 @@ class Command(BaseCommand):
 
         gamma_db_val = global_param.gamma_tilde
         if gamma_db_val is None or not (-10.0 < gamma_db_val < 10.0):
-            gamma = -1.0  # 안전한 기본값으로 초기화
+            gamma = -1.0  # 기본값으로 초기화
         else:
-            gamma = gamma_db_val  # 감마 값을 곧바로 사용
+            gamma = gamma_db_val
 
         # 메뉴별 가중치 업데이트는 계속 개별로 하되 학습 파라미터는 전역 a,b,gamma만 업데이트
 
@@ -52,18 +46,15 @@ class Command(BaseCommand):
         all_item_ids = list(set(all_item_ids))
         self.stdout.write(f"전체 아이템 수 (중복 제거 후): {len(all_item_ids)}")
 
-        # 학습 데이터 쿼리: 모든 메뉴 아이템 레코드 필터링 (미학습)
-        queryset = ItemRecord.objects.filter(
-            store_item_id__in=all_item_ids, is_learned=False
-        )
+        # 학습 데이터 쿼리: 모든 메뉴 아이템 레코드 필터링 → 조건 제거
+        queryset = ItemRecord.objects.filter(store_item_id__in=all_item_ids)
 
         record_count = queryset.count()
         if record_count == 0:
-            self.stdout.write("신규 학습 데이터 없음, 건너뜀")
+            self.stdout.write("ItemRecord 데이터가 없습니다.")
             return
-        elif record_count < 10:
-            self.stdout.write(f"학습 데이터 부족 (신규 {record_count} 건)")
-        self.stdout.write(f"필터링된 학습 대상 레코드 수: {record_count}")
+
+        self.stdout.write(f"전체 학습 대상 레코드 수: {record_count}")
 
         # 최신 5000개 데이터만 사용
         records = queryset.order_by("-created_at")[:5000]
@@ -87,7 +78,7 @@ class Command(BaseCommand):
                 t = r.time_offset_idx
 
                 price = r.record_item_price * (1 - r.record_discount_rate)
-                cost = store_item.menu.menu_price * 0.7  # 원가 70% 고정
+                cost = store_item.menu.menu_price * 0.6  # 원가 60% 고정
 
                 # 원가 반영 할인율 학습 변수 (가격에서 원가 차이)
                 p_n = (price - cost) / 1000.0
@@ -126,9 +117,9 @@ class Command(BaseCommand):
                     f"[메뉴: {menu.menu_name}] dp_weight 업데이트: {new_w:.6f}"
                 )
 
-        # 학습 완료된 레코드 is_learned=True 처리
-        record_ids = [r.record_id for r in records]
-        ItemRecord.objects.filter(record_id__in=record_ids).update(is_learned=True)
+        # # 학습 완료된 레코드 is_learned=True 처리
+        # record_ids = [r.record_id for r in records]
+        # ItemRecord.objects.filter(record_id__in=record_ids).update(is_learned=True)
 
         self.stdout.write(
             f"학습 완료 - beta0(a): {a:.4f}, alpha(b): {b:.4f}, gamma_tilde: {global_param.gamma_tilde:.4f}"
