@@ -65,8 +65,8 @@ class Command(BaseCommand):
             self.stdout.write(f"학습 데이터 부족 (신규 {record_count} 건)")
         self.stdout.write(f"필터링된 학습 대상 레코드 수: {record_count}")
 
-        # 최신 100개 데이터만 사용
-        records = queryset.order_by("-created_at")[:100]
+        # 최신 5000개 데이터만 사용
+        records = queryset.order_by("-created_at")[:5000]
 
         store_items = StoreItem.objects.filter(
             item_id__in=[r.store_item_id for r in records]
