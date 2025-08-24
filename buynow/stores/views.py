@@ -795,6 +795,229 @@ class StoreSpaceDetailView(APIView):
         return Response(response_data)
 
 
+# class StoreSpaceDetailView(APIView):
+#     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
+
+#     @swagger_auto_schema(
+#         operation_summary="특정 Space의 상세 정보 및 메뉴 정보 조회",
+#         manual_parameters=[
+#             openapi.Parameter(
+#                 "time",
+#                 openapi.IN_QUERY,
+#                 description="조회할 예약 시간 (0~36)",
+#                 type=openapi.TYPE_INTEGER,
+#                 required=True,
+#             )
+#         ],
+#         responses={
+#             200: openapi.Response(
+#                 description="성공",
+#                 schema=openapi.Schema(
+#                     type=openapi.TYPE_OBJECT,
+#                     properties={
+#                         "store_name": openapi.Schema(type=openapi.TYPE_STRING),
+#                         "space_name": openapi.Schema(type=openapi.TYPE_STRING),
+#                         "space_description": openapi.Schema(type=openapi.TYPE_STRING),
+#                         "selected_time": openapi.Schema(type=openapi.TYPE_STRING),
+#                         "is_liked": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+#                         "liked_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+#                         "space_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+#                         "space_image_url": openapi.Schema(type=openapi.TYPE_STRING),
+#                         "menus": openapi.Schema(
+#                             type=openapi.TYPE_ARRAY,
+#                             items=openapi.Schema(
+#                                 type=openapi.TYPE_OBJECT,
+#                                 properties={
+#                                     "menu_id": openapi.Schema(
+#                                         type=openapi.TYPE_INTEGER
+#                                     ),
+#                                     "menu_name": openapi.Schema(
+#                                         type=openapi.TYPE_STRING
+#                                     ),
+#                                     "menu_image_url": openapi.Schema(
+#                                         type=openapi.TYPE_STRING
+#                                     ),
+#                                     "menu_price": openapi.Schema(
+#                                         type=openapi.TYPE_INTEGER
+#                                     ),
+#                                     "item_id": openapi.Schema(
+#                                         type=openapi.TYPE_INTEGER, nullable=True
+#                                     ),
+#                                     "discount_rate": openapi.Schema(
+#                                         type=openapi.TYPE_INTEGER
+#                                     ),
+#                                     "discounted_price": openapi.Schema(
+#                                         type=openapi.TYPE_INTEGER
+#                                     ),
+#                                     "is_available": openapi.Schema(
+#                                         type=openapi.TYPE_BOOLEAN
+#                                     ),
+#                                 },
+#                             ),
+#                         ),
+#                     },
+#                 ),
+#             ),
+#             400: openapi.Response(
+#                 description="잘못된 요청",
+#                 schema=openapi.Schema(
+#                     type=openapi.TYPE_OBJECT,
+#                     properties={
+#                         "error": openapi.Schema(type=openapi.TYPE_STRING),
+#                     },
+#                 ),
+#             ),
+#             404: openapi.Response(
+#                 description="Space 없음 또는 메뉴 없음",
+#                 schema=openapi.Schema(
+#                     type=openapi.TYPE_OBJECT,
+#                     properties={
+#                         "errorCode": openapi.Schema(type=openapi.TYPE_STRING),
+#                         "message": openapi.Schema(type=openapi.TYPE_STRING),
+#                     },
+#                 ),
+#             ),
+#         },
+#     )
+#     def get(self, request, space_id):
+#         user = request.user
+#         if not request.user or not request.user.is_authenticated:
+#             return Response({"error": "인증이 필요합니다."}, status=401)
+#         # time 쿼리 파라미터 확인 및 검증
+#         time_param = request.GET.get("time")
+#         try:
+#             time_int = int(time_param)
+#         except (TypeError, ValueError):
+#             return Response(
+#                 {"error": "`time` query parameter는 필수이며 정수여야 합니다."},
+#                 status=400,
+#             )
+#         if not 0 <= time_int <= 36:
+#             return Response({"error": "`time`은 0과 36 사이여야 합니다."}, status=400)
+
+#         try:
+#             space = StoreSpace.objects.get(pk=space_id)
+#         except StoreSpace.DoesNotExist:
+#             return Response(
+#                 {
+#                     "errorCode": "SPACE_NOT_FOUND",
+#                     "message": "공간(space_id)을 찾을 수 없습니다.",
+#                 },
+#                 status=status.HTTP_404_NOT_FOUND,
+#             )
+
+#         store = space.store
+
+#         today = datetime.now().date()
+#         target_date = today
+#         target_time = time_int
+#         if time_int >= 24:
+#             target_date = today + timedelta(days=1)
+#             target_time = time_int - 24
+#         selected_time_formatted = f"{target_time}:00"
+
+#         # StoreMenuSpace에서 해당 space_id에 연결된 menu들
+#         menu_spaces = StoreMenuSpace.objects.filter(space=space)
+#         menu_ids = menu_spaces.values_list("menu_id", flat=True).distinct()
+
+#         if not menu_ids:
+#             return Response(
+#                 {
+#                     "errorCode": "NO_MENU_AVAILABLE",
+#                     "message": "해당 공간에 등록된 메뉴가 없습니다.",
+#                 },
+#                 status=status.HTTP_404_NOT_FOUND,
+#             )
+
+#         menus_data = []
+#         today = datetime.now().date()
+
+#         # 각 메뉴별로 해당 시간대에 할인율 높은 순으로 StoreItem 가져오기
+#         # 여러 개 모두 반환
+#         for menu_id in menu_ids:
+#             menu = StoreMenu.objects.filter(pk=menu_id).first()
+#             if not menu:
+#                 continue
+
+#             # 할인율이 높은 순으로 모든 StoreItem 조회 (item_reservation_date = today, item_reservation_time = time_int)
+#             store_items = StoreItem.objects.filter(
+#                 menu=menu,
+#                 space=space,
+#                 item_reservation_date=target_date,
+#                 item_reservation_time=target_time,
+#             ).order_by("-max_discount_rate")
+
+#             if not store_items.exists():
+#                 # 재고 없거나 예약 불가능한 경우라도 메뉴는 노출, 빈 상태로 is_available False 처리할 수 있음
+#                 menus_data.append(
+#                     {
+#                         "menu_id": menu.menu_id,
+#                         "menu_name": menu.menu_name,
+#                         "menu_image_url": menu.menu_image_url,
+#                         "menu_price": menu.menu_price,
+#                         "item_id": None,
+#                         "discount_rate": 0,
+#                         "discounted_price": menu.menu_price,
+#                         "is_available": False,
+#                     }
+#                 )
+#                 continue
+
+#             # 메뉴별 StoreItem 여러개 모두 처리
+#             for item in store_items:
+#                 # 수정 - current_discount_rate 사용
+#                 discounted_price = (
+#                     int(menu.menu_price * (1 - item.current_discount_rate))
+#                     if item.current_discount_rate
+#                     else menu.menu_price
+#                 )
+#                 menus_data.append(
+#                     {
+#                         "menu_id": menu.menu_id,
+#                         "menu_name": menu.menu_name,
+#                         "menu_image_url": menu.menu_image_url,
+#                         "menu_price": menu.menu_price,
+#                         "item_id": item.item_id,
+#                         "discount_rate": (
+#                             int(item.current_discount_rate * 100)
+#                             if item.current_discount_rate
+#                             else 0
+#                         ),
+#                         "discounted_price": discounted_price,
+#                         "is_available": item.item_stock > 0,
+#                     }
+#                 )
+
+#         # 찜 - 사용자 인증 방식 적용
+#         user = request.user
+#         if not user or not user.is_authenticated:
+#             return Response(
+#                 {"error": "인증이 필요합니다."}, status=401
+#             )  # 인증 필요시 401 반환
+
+#         # 찜 정보 페어 반환
+#         is_liked = False
+#         liked_id = 0
+#         like = UserLike.objects.filter(user=user, store=store).first()
+#         if like:
+#             is_liked = True
+#             liked_id = like.like_id
+
+#         response_data = {
+#             "store_name": store.store_name,
+#             "space_name": space.space_name,
+#             "space_description": space.space_description,
+#             "selected_time": selected_time_formatted,
+#             "is_liked": is_liked,
+#             "liked_id": liked_id,
+#             "space_id": space.space_id,
+#             "space_image_url": space.space_image_url,
+#             "menus": menus_data,
+#         }
+
+#         return Response(response_data)
+
+
 class StoreSingleSpaceDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
 
