@@ -13,11 +13,11 @@ class Command(BaseCommand):
     lr = 0.002
     epochs = 5
 
-    def gamma_to_gamma_tilde(self, gamma):
-        val = math.exp(-gamma) - 1
-        if val <= 0:
-            val = 1e-8
-        return math.log(val)
+    # def gamma_to_gamma_tilde(self, gamma):
+    #     val = math.exp(-gamma) - 1
+    #     if val <= 0:
+    #         val = 1e-8
+    #     return math.log(val)
 
     def handle(self, *args, **kwargs):
         self.stdout.write("할인율 파라미터 학습 시작...")
@@ -36,11 +36,11 @@ class Command(BaseCommand):
         a = global_param.beta0
         b = global_param.alpha
 
-        # 기존 gamma_tilde → gamma 역변환 (기본값 -1.0)
-        if global_param.gamma_tilde is not None:
-            gamma = -math.log(math.exp(global_param.gamma_tilde) + 1)
+        gamma_db_val = global_param.gamma_tilde
+        if gamma_db_val is None or not (-10.0 < gamma_db_val < 10.0):
+            gamma = -1.0  # 안전한 기본값으로 초기화
         else:
-            gamma = -1.0
+            gamma = gamma_db_val  # 감마 값을 곧바로 사용
 
         # 메뉴별 가중치 업데이트는 계속 개별로 하되 학습 파라미터는 전역 a,b,gamma만 업데이트
 
@@ -92,8 +92,8 @@ class Command(BaseCommand):
                 # 원가 반영 할인율 학습 변수 (가격에서 원가 차이)
                 p_n = (price - cost) / 1000.0
 
-                # 시간 인덱스 스케일링 (예: 10으로 나눠서 감쇠)
-                t_scaled = t / 10.0
+                # 시간 인덱스 스케일링 (예: 100으로 나눠서 감쇠)
+                t_scaled = t / 100.0
 
                 z = a + b * p_n + gamma * t_scaled + w
                 p = sigmoid(z)
@@ -110,44 +110,13 @@ class Command(BaseCommand):
                 menu_id = store_item.menu.menu_id
                 menu_weight_updates[menu_id] = w
 
-        # # 경사 하강법으로 전역 파라미터 업데이트
-        # for _ in range(self.epochs):
-        #     for r in records:
-        #         store_item = store_item_map.get(r.store_item_id)
-        #         if not store_item:
-        #             continue
-
-        #         sold = r.sold
-        #         w = store_item.menu.dp_weight  # 메뉴별 가중치는 그대로 사용
-        #         t = r.time_offset_idx  # 시간 인덱스 사용
-
-        #         price = r.record_item_price * (1 - r.record_discount_rate)
-        #         p_n = price / 1000.0
-
-        #         z = a + b * p_n + gamma * t + w
-        #         p = sigmoid(z)
-
-        #         weight = 2.0 if sold == 1 else 1.0
-        #         delta = (p - sold) * weight
-
-        #         a -= self.lr * delta
-        #         b -= self.lr * delta * p_n
-        #         gamma -= self.lr * delta * t
-
-        #         # dp_weight 업데이트 추가
-        #         w -= self.lr * delta
-
-        #         # 변경된 weight를 저장할 메뉴별 딕셔너리에 반영
-        #         menu_id = store_item.menu.menu_id
-        #         menu_weight_updates[menu_id] = w
-
         # 학습된 전역 파라미터 저장
         global_param.beta0 = a
         global_param.alpha = b
-        global_param.gamma_tilde = self.gamma_to_gamma_tilde(gamma)
+        global_param.gamma_tilde = gamma  # 감마 값을 그대로 저장
         global_param.save()
 
-        # 업데이트된 메뉴별 dp_weight 저장 [수정]
+        # 업데이트된 메뉴별 dp_weight 저장
         for menu in menus:
             if menu.menu_id in menu_weight_updates:
                 new_w = menu_weight_updates[menu.menu_id]

@@ -33,7 +33,8 @@ class Command(BaseCommand):
         batch_size = 1000
 
         a, b = param.beta0, param.alpha
-        gamma = self.gamma_tilde_to_gamma(param.gamma_tilde)
+        # 변경! gamma_tilde 값을 직접 감마로 사용
+        gamma = param.gamma_tilde
 
         menus = StoreMenu.objects.all()
         if not menus:
@@ -87,7 +88,7 @@ class Command(BaseCommand):
 
             for store_item in items_to_update:
                 t = time_offset_map[store_item.item_id]
-                t_scaled = t / 10.0  # 학습 코드와 동일한 시간 인덱스 스케일링
+                t_scaled = t / 100.0  # 학습 코드와 동일한 시간 인덱스 스케일링
 
                 cost = menu.menu_price * 0.7
 
