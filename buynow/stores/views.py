@@ -1,4 +1,8 @@
-from config.kakaoapi import get_distance_walktime, get_coordinates, get_distance_walktime_with_coor
+from config.kakaoapi import (
+    get_distance_walktime,
+    get_coordinates,
+    get_distance_walktime_with_coor,
+)
 
 from django.shortcuts import render
 
@@ -13,7 +17,15 @@ import math
 import requests  # 외부 api 호출용
 import random  # 더미 데이터 랜덤 선택용!
 
-from .models import Store, StoreItem, StoreSpace, StoreMenu, StoreMenuSpace, StoreSlot, StoreCoordinate
+from .models import (
+    Store,
+    StoreItem,
+    StoreSpace,
+    StoreMenu,
+    StoreMenuSpace,
+    StoreSlot,
+    StoreCoordinate,
+)
 from reservations.models import UserLike, Reservation
 from records.models import ItemRecord
 from config.kakaoapi import change_to_cau
@@ -125,7 +137,7 @@ class StoreListView(APIView):
             return Response(
                 {"error": "사용자 주소 정보가 필요합니다."}, status=400
             )  # 주소 필요시 400 반환
-        
+
         user_x, user_y = get_coordinates(user.user_address)
         user_address = [user_x, user_y]
 
@@ -147,7 +159,7 @@ class StoreListView(APIView):
 
         # 기존 코드에서 1번, 2번, 3번, 4번, 5번 과정을 모두 생략
         # 6번 과정부터 시작
-        #StoreItem 조회는 그대로 유지하되, 재고(item_stock)가 0보다 큰 것만 필터링
+        # StoreItem 조회는 그대로 유지하되, 재고(item_stock)가 0보다 큰 것만 필터링
         base_filters = {
             "item_reservation_date": target_date,
             "item_reservation_time": target_time,
@@ -160,9 +172,9 @@ class StoreListView(APIView):
                 base_filters["store__store_category__iexact"] = normalized_category
 
         # 활성화된 아이템만 필터링 (재고 > 0)
-        active_items_qs = StoreItem.objects.filter(**base_filters, item_stock__gt=0).select_related(
-            "store", "menu", "space"
-        )
+        active_items_qs = StoreItem.objects.filter(
+            **base_filters, item_stock__gt=0
+        ).select_related("store", "menu", "space")
 
         # 활성화된 Store가 한 개라도 있는 store_id 집합
         active_store_ids = active_items_qs.values_list("store_id", flat=True).distinct()
@@ -173,8 +185,8 @@ class StoreListView(APIView):
         available_slot_stores = StoreSlot.objects.filter(
             slot_reservation_date=target_date,
             slot_reservation_time=target_time,
-            is_reserved=False
-        ).values_list('space__store_id', flat=True)
+            is_reserved=False,
+        ).values_list("space__store_id", flat=True)
 
         # active_store_ids와 available_slot_stores의 교집합을 구합니다.
         # 이렇게 하면 아이템 재고가 있고, 동시에 예약 가능한 슬롯이 있는 가게만 남게 됩니다.
@@ -182,42 +194,54 @@ class StoreListView(APIView):
 
         # 최종적으로 필터링된 아이템 쿼리셋
         filtered_items_qs = active_items_qs.filter(store_id__in=final_store_ids)
-        
+
         # 각 가게별로 최대 할인 아이템 선택
-        ranked_items_qs = filtered_items_qs.annotate(
-            discount_amount=ExpressionWrapper(F("menu__menu_price") * F("current_discount_rate"), output_field=FloatField()) # max -> current
-        ).annotate(
-            rank=Window(
-                expression=RowNumber(),
-                partition_by=[F('store_id')],
-                order_by=[F('discount_amount').desc(), F('menu__menu_price').asc(), F('item_id').asc()]
+        ranked_items_qs = (
+            filtered_items_qs.annotate(
+                discount_amount=ExpressionWrapper(
+                    F("menu__menu_price") * F("current_discount_rate"),
+                    output_field=FloatField(),
+                )  # max -> current
             )
-        ).select_related(
-            "store", "menu"
+            .annotate(
+                rank=Window(
+                    expression=RowNumber(),
+                    partition_by=[F("store_id")],
+                    order_by=[
+                        F("discount_amount").desc(),
+                        F("menu__menu_price").asc(),
+                        F("item_id").asc(),
+                    ],
+                )
+            )
+            .select_related("store", "menu")
         )
         final_items = list(ranked_items_qs.filter(rank=1))
-        
+
         # for문 밖에서 모든 StoreCoordinate, UserLike 정보를 한 번에 가져와 딕셔너리로 저장
         store_coords_dict = {
-            item['store_id']: [item['store_x'], item['store_y']]
-            for item in StoreCoordinate.objects.filter(store_id__in=list(final_store_ids))
-                .values('store_id', 'store_x', 'store_y')
+            item["store_id"]: [item["store_x"], item["store_y"]]
+            for item in StoreCoordinate.objects.filter(
+                store_id__in=list(final_store_ids)
+            ).values("store_id", "store_x", "store_y")
         }
 
         liked_stores_dict = {
             like.store_id: like.like_id
-            for like in UserLike.objects.filter(user=user, store_id__in=list(final_store_ids))
+            for like in UserLike.objects.filter(
+                user=user, store_id__in=list(final_store_ids)
+            )
         }
-    
+
         # 4. 루프를 돌면서 한 번에 처리
         results = []
 
         for item in final_items:
             store = item.store
             store_id = store.store_id
-            
+
             store_address = store_coords_dict.get(store_id)
-            
+
             distance = 0
             on_foot = 0
             if user_address and store_address:
@@ -229,7 +253,7 @@ class StoreListView(APIView):
 
             is_liked = store_id in liked_stores_dict
             liked_id = liked_stores_dict.get(store_id, 0)
-            
+
             results.append(
                 {
                     "store_id": store_id,
@@ -239,11 +263,14 @@ class StoreListView(APIView):
                     "store_image_url": store.store_image_url,
                     "menu_name": item.menu.menu_name,
                     "menu_id": item.menu.menu_id,
-                    "max_discount_rate": int(item.current_discount_rate * 100), # max -> current
+                    "max_discount_rate": int(
+                        item.current_discount_rate * 100
+                    ),  # max -> current
                     "max_discount_menu": item.menu.menu_name,
                     "max_discount_price_origin": item.menu.menu_price,
                     "max_discount_price": int(
-                        item.menu.menu_price * (1 - item.current_discount_rate) # max -> current
+                        item.menu.menu_price
+                        * (1 - item.current_discount_rate)  # max -> current
                     ),
                     "is_liked": is_liked,
                     "liked_id": liked_id,
@@ -753,229 +780,6 @@ class StoreSpaceDetailView(APIView):
         }
 
         return Response(response_data)
-
-
-# class StoreSpaceDetailView(APIView):
-#     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
-
-#     @swagger_auto_schema(
-#         operation_summary="특정 Space의 상세 정보 및 메뉴 정보 조회",
-#         manual_parameters=[
-#             openapi.Parameter(
-#                 "time",
-#                 openapi.IN_QUERY,
-#                 description="조회할 예약 시간 (0~36)",
-#                 type=openapi.TYPE_INTEGER,
-#                 required=True,
-#             )
-#         ],
-#         responses={
-#             200: openapi.Response(
-#                 description="성공",
-#                 schema=openapi.Schema(
-#                     type=openapi.TYPE_OBJECT,
-#                     properties={
-#                         "store_name": openapi.Schema(type=openapi.TYPE_STRING),
-#                         "space_name": openapi.Schema(type=openapi.TYPE_STRING),
-#                         "space_description": openapi.Schema(type=openapi.TYPE_STRING),
-#                         "selected_time": openapi.Schema(type=openapi.TYPE_STRING),
-#                         "is_liked": openapi.Schema(type=openapi.TYPE_BOOLEAN),
-#                         "liked_id": openapi.Schema(type=openapi.TYPE_INTEGER),
-#                         "space_id": openapi.Schema(type=openapi.TYPE_INTEGER),
-#                         "space_image_url": openapi.Schema(type=openapi.TYPE_STRING),
-#                         "menus": openapi.Schema(
-#                             type=openapi.TYPE_ARRAY,
-#                             items=openapi.Schema(
-#                                 type=openapi.TYPE_OBJECT,
-#                                 properties={
-#                                     "menu_id": openapi.Schema(
-#                                         type=openapi.TYPE_INTEGER
-#                                     ),
-#                                     "menu_name": openapi.Schema(
-#                                         type=openapi.TYPE_STRING
-#                                     ),
-#                                     "menu_image_url": openapi.Schema(
-#                                         type=openapi.TYPE_STRING
-#                                     ),
-#                                     "menu_price": openapi.Schema(
-#                                         type=openapi.TYPE_INTEGER
-#                                     ),
-#                                     "item_id": openapi.Schema(
-#                                         type=openapi.TYPE_INTEGER, nullable=True
-#                                     ),
-#                                     "discount_rate": openapi.Schema(
-#                                         type=openapi.TYPE_INTEGER
-#                                     ),
-#                                     "discounted_price": openapi.Schema(
-#                                         type=openapi.TYPE_INTEGER
-#                                     ),
-#                                     "is_available": openapi.Schema(
-#                                         type=openapi.TYPE_BOOLEAN
-#                                     ),
-#                                 },
-#                             ),
-#                         ),
-#                     },
-#                 ),
-#             ),
-#             400: openapi.Response(
-#                 description="잘못된 요청",
-#                 schema=openapi.Schema(
-#                     type=openapi.TYPE_OBJECT,
-#                     properties={
-#                         "error": openapi.Schema(type=openapi.TYPE_STRING),
-#                     },
-#                 ),
-#             ),
-#             404: openapi.Response(
-#                 description="Space 없음 또는 메뉴 없음",
-#                 schema=openapi.Schema(
-#                     type=openapi.TYPE_OBJECT,
-#                     properties={
-#                         "errorCode": openapi.Schema(type=openapi.TYPE_STRING),
-#                         "message": openapi.Schema(type=openapi.TYPE_STRING),
-#                     },
-#                 ),
-#             ),
-#         },
-#     )
-#     def get(self, request, space_id):
-#         user = request.user
-#         if not request.user or not request.user.is_authenticated:
-#             return Response({"error": "인증이 필요합니다."}, status=401)
-#         # time 쿼리 파라미터 확인 및 검증
-#         time_param = request.GET.get("time")
-#         try:
-#             time_int = int(time_param)
-#         except (TypeError, ValueError):
-#             return Response(
-#                 {"error": "`time` query parameter는 필수이며 정수여야 합니다."},
-#                 status=400,
-#             )
-#         if not 0 <= time_int <= 36:
-#             return Response({"error": "`time`은 0과 36 사이여야 합니다."}, status=400)
-
-#         try:
-#             space = StoreSpace.objects.get(pk=space_id)
-#         except StoreSpace.DoesNotExist:
-#             return Response(
-#                 {
-#                     "errorCode": "SPACE_NOT_FOUND",
-#                     "message": "공간(space_id)을 찾을 수 없습니다.",
-#                 },
-#                 status=status.HTTP_404_NOT_FOUND,
-#             )
-
-#         store = space.store
-
-#         today = datetime.now().date()
-#         target_date = today
-#         target_time = time_int
-#         if time_int >= 24:
-#             target_date = today + timedelta(days=1)
-#             target_time = time_int - 24
-#         selected_time_formatted = f"{target_time}:00"
-
-#         # StoreMenuSpace에서 해당 space_id에 연결된 menu들
-#         menu_spaces = StoreMenuSpace.objects.filter(space=space)
-#         menu_ids = menu_spaces.values_list("menu_id", flat=True).distinct()
-
-#         if not menu_ids:
-#             return Response(
-#                 {
-#                     "errorCode": "NO_MENU_AVAILABLE",
-#                     "message": "해당 공간에 등록된 메뉴가 없습니다.",
-#                 },
-#                 status=status.HTTP_404_NOT_FOUND,
-#             )
-
-#         menus_data = []
-#         today = datetime.now().date()
-
-#         # 각 메뉴별로 해당 시간대에 할인율 높은 순으로 StoreItem 가져오기
-#         # 여러 개 모두 반환
-#         for menu_id in menu_ids:
-#             menu = StoreMenu.objects.filter(pk=menu_id).first()
-#             if not menu:
-#                 continue
-
-#             # 할인율이 높은 순으로 모든 StoreItem 조회 (item_reservation_date = today, item_reservation_time = time_int)
-#             store_items = StoreItem.objects.filter(
-#                 menu=menu,
-#                 space=space,
-#                 item_reservation_date=target_date,
-#                 item_reservation_time=target_time,
-#             ).order_by("-max_discount_rate")
-
-#             if not store_items.exists():
-#                 # 재고 없거나 예약 불가능한 경우라도 메뉴는 노출, 빈 상태로 is_available False 처리할 수 있음
-#                 menus_data.append(
-#                     {
-#                         "menu_id": menu.menu_id,
-#                         "menu_name": menu.menu_name,
-#                         "menu_image_url": menu.menu_image_url,
-#                         "menu_price": menu.menu_price,
-#                         "item_id": None,
-#                         "discount_rate": 0,
-#                         "discounted_price": menu.menu_price,
-#                         "is_available": False,
-#                     }
-#                 )
-#                 continue
-
-#             # 메뉴별 StoreItem 여러개 모두 처리
-#             for item in store_items:
-#                 # 수정 - current_discount_rate 사용
-#                 discounted_price = (
-#                     int(menu.menu_price * (1 - item.current_discount_rate))
-#                     if item.current_discount_rate
-#                     else menu.menu_price
-#                 )
-#                 menus_data.append(
-#                     {
-#                         "menu_id": menu.menu_id,
-#                         "menu_name": menu.menu_name,
-#                         "menu_image_url": menu.menu_image_url,
-#                         "menu_price": menu.menu_price,
-#                         "item_id": item.item_id,
-#                         "discount_rate": (
-#                             int(item.current_discount_rate * 100)
-#                             if item.current_discount_rate
-#                             else 0
-#                         ),
-#                         "discounted_price": discounted_price,
-#                         "is_available": item.item_stock > 0,
-#                     }
-#                 )
-
-#         # 찜 - 사용자 인증 방식 적용
-#         user = request.user
-#         if not user or not user.is_authenticated:
-#             return Response(
-#                 {"error": "인증이 필요합니다."}, status=401
-#             )  # 인증 필요시 401 반환
-
-#         # 찜 정보 페어 반환
-#         is_liked = False
-#         liked_id = 0
-#         like = UserLike.objects.filter(user=user, store=store).first()
-#         if like:
-#             is_liked = True
-#             liked_id = like.like_id
-
-#         response_data = {
-#             "store_name": store.store_name,
-#             "space_name": space.space_name,
-#             "space_description": space.space_description,
-#             "selected_time": selected_time_formatted,
-#             "is_liked": is_liked,
-#             "liked_id": liked_id,
-#             "space_id": space.space_id,
-#             "space_image_url": space.space_image_url,
-#             "menus": menus_data,
-#         }
-
-#         return Response(response_data)
 
 
 class StoreSingleSpaceDetailView(APIView):
@@ -1809,56 +1613,67 @@ class OwnerStatic(APIView):
         # 그러면 이제 과거 리스트에서 얻어낸 total_revenue의 value와 현재 리스트의 것 비교해서 상승룰(delta) 구하기
         # total_reservation_count 도 그렇게 하기
 
+
 # StoreCoordinate 좌표 채우기 (전체)
 class MakeAllCoordinates(APIView):
     permission_classes = [IsAdminRole]
 
     def post(self, request):
         try:
-            stores = Store.objects.all() # 모든 store 다 가져오기
+            stores = Store.objects.all()  # 모든 store 다 가져오기
             for store in stores:
                 # 이미 좌표 데이터가 존재하는 지 확인
                 if not StoreCoordinate.objects.filter(store_id=store.store_id).exists():
                     address = getattr(store, "store_address", None)
                     if address:
-                        x,y = get_coordinates(address)
+                        x, y = get_coordinates(address)
                         if x and y:
                             StoreCoordinate.objects.create(
                                 store_id=store.store_id,
                                 store_x=float(x),
-                                store_y=float(y)
+                                store_y=float(y),
                             )
                         else:
                             # 좌표 변환 실패 시
                             print(f"좌표 변환 실패:{store.store_name}({address})")
-            return Response({"message":"모든 가게의 좌표 데이터 생성을 완료했습니다."}, status = status.HTTP_201_CREATED)
+            return Response(
+                {"message": "모든 가게의 좌표 데이터 생성을 완료했습니다."},
+                status=status.HTTP_201_CREATED,
+            )
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 # StoreCoordiante 좌표 채우기 (단일) -> 이후 가게 추가하는 상황 고려
 class MakeOneCoordinate(APIView):
     permission_classes = [IsAdminRole]
-    
+
     def post(self, request, store_id):
         try:
-            store = get_object_or_404(Store, store_id = store_id) # 모든 store 다 가져오기
+            store = get_object_or_404(
+                Store, store_id=store_id
+            )  # 모든 store 다 가져오기
             # 이미 좌표 데이터가 존재하는 지 확인
             if not StoreCoordinate.objects.filter(store_id=store.store_id).exists():
                 address = getattr(store, "store_address", None)
                 if address:
-                    x,y = get_coordinates(address)
+                    x, y = get_coordinates(address)
                     if x and y:
                         StoreCoordinate.objects.create(
-                            store_id=store.store_id,
-                            store_x=float(x),
-                            store_y=float(y)
+                            store_id=store.store_id, store_x=float(x), store_y=float(y)
                         )
                     else:
                         # 좌표 변환 실패 시
                         print(f"좌표 변환 실패:{store.store_name}({address})")
-            return Response({"message": f"store_id : {store.store_id} 인 가게의 좌표 데이터 생성을 완료했습니다."}, status = 201)
+            return Response(
+                {
+                    "message": f"store_id : {store.store_id} 인 가게의 좌표 데이터 생성을 완료했습니다."
+                },
+                status=201,
+            )
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

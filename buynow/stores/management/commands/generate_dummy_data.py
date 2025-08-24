@@ -88,14 +88,14 @@ class Command(BaseCommand):
             self._batch_delete(User.objects.all(), batch_size)
             self.stdout.write("기존 데이터 삭제 완료")
 
-        # --- 주소 & 템플릿 준비 ---
+        #  주소 & 템플릿 준비
         address_pool = random.sample(dongjak_addresses, len(dongjak_addresses))
         selected_templates = random.sample(store_templates, options["stores"])
 
         def safe_pop_address():
             return address_pool.pop() if address_pool else faker.address()
 
-        # --- Users 생성 ---
+        #  Users 생성
         owners = [
             User(
                 user_email=faker.unique.email(),
@@ -133,7 +133,7 @@ class Command(BaseCommand):
         owners = list(User.objects.filter(user_role="owner", is_dummy=True))
         customers = list(User.objects.filter(user_role="customer", is_dummy=True))
 
-        # --- Store 생성 ---
+        #  Store 생성
         stores = []
         store_template_pairs = []
         stores_per_owner = max(1, options["stores"] // len(owners))
@@ -255,16 +255,8 @@ class Command(BaseCommand):
             self.style.NOTICE("StoreMenu, StoreSpace, StoreMenuSpace 생성 완료")
         )
 
-        # --- StoreItem 생성 배치 처리 ---
+        #  StoreItem 생성 배치 처리
         records_to_create = []
-
-        # def find_max_discount(menu):
-        #     for s, template in store_template_pairs:
-        #         if s == menu.store:
-        #             for m in template.get("menus", []):
-        #                 if m.get("menu_name") == menu.menu_name:
-        #                     return round(random.uniform(0.15, 0.5), 2)
-        #     return 0.3
 
         # 사전에 store_name을 key로 한 매핑 생성 (handle 메서드 초반에 추가)
         store_name_to_template = {s.store_name: t for s, t in store_template_pairs}
@@ -320,7 +312,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.NOTICE("StoreItem 생성 완료"))
 
-        # --- StoreSlot 생성 배치 처리 ---
+        #  StoreSlot 생성 배치 처리
         records_to_create = []
         for space in StoreSpace.objects.all():
             for day_offset in range(days):
@@ -352,8 +344,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.NOTICE("StoreSlot 생성 완료"))
 
-        # --- 예약 생성 ---
-        # items_with_stock = list(StoreItem.objects.filter(item_stock=1))
+        # 예약 생성
         today = date.today()
         dummy_start_date = today - timedelta(days=6)
         dummy_end_date = today - timedelta(days=1)
@@ -422,7 +413,7 @@ class Command(BaseCommand):
             store.is_active = store.storeitem_set.filter(item_stock__gt=0).exists()
             store.save()
 
-        # --- 미판매 재고에 대한 기록 ---
+        #  미판매 재고에 대한 기록
         count = 0
         for item in StoreItem.objects.filter(item_stock=1, is_dummy=True):
             safe_create_item_record(item, sold=0, is_dummy_flag=True)
@@ -436,7 +427,7 @@ class Command(BaseCommand):
             self.style.NOTICE(f"미판매 재고 기록 생성 완료, 총 {count}개")
         )
 
-        # --- UserLike 생성 ---
+        #  UserLike 생성
         records_to_create = []
         for customer in customers:
             like_count = random.randint(2, 5)
@@ -463,7 +454,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.NOTICE("UserLike 생성 완료"))
 
-        # --- StoreOperatingHour 생성 ---
+        #  StoreOperatingHour 생성
         records_to_create = []
         for store in stores:
             for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
@@ -496,4 +487,4 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.NOTICE("StoreOperatingHour 생성 완료"))
 
-        self.stdout.write(self.style.SUCCESS("✅ 더미데이터 생성 완료"))
+        self.stdout.write(self.style.SUCCESS("더미데이터 생성 완료!!"))
