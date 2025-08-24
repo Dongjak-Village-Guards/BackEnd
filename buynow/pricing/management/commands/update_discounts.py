@@ -13,7 +13,8 @@ class Command(BaseCommand):
     price_grid_interval = 10  # 가격 탐색 간격 10원으로 세밀화
 
     def gamma_tilde_to_gamma(self, gamma_tilde):
-        return -math.log(math.exp(gamma_tilde) + 1)
+        clipped_val = max(gamma_tilde, -30)
+        return -math.log1p(math.exp(clipped_val))  # log1p(x) = log(1+x)
 
     def handle(self, *args, **kwargs):
         self.stdout.write("할인율 시간별 업데이트 시작...")
