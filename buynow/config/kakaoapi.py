@@ -92,6 +92,20 @@ def get_distance_walktime(store_address, user_address):
 
     return distance_km, walk_time_min
 
+# 가게 전체 목록 조회용 직선 거리 & 도보 시간 계산
+def get_distance_walktime_with_coor(store_coords, user_coords):
+    if not store_coords or not user_coords:
+        return None, None
+
+    # 문자열 -> float (혹시 모를 경우를 대비)
+    ux, uy = float(user_coords[0]), float(user_coords[1])
+    sx, sy = float(store_coords[0]), float(store_coords[1])
+
+    distance_km = haversine(uy, ux, sy, sx)
+    walk_time_min = estimate_walk_time(distance_km)
+
+    return distance_km, walk_time_min
+
 # 가짜 가게 주소 -> 중앙대 주소로 바꾸는 함수
 def change_to_cau(store_address):
 
