@@ -6,7 +6,8 @@ from accounts.permissions import IsUserRole, IsAdminRole, IsOwnerRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField
+from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField, Window
+from django.db.models.functions import RowNumber
 from datetime import datetime, timedelta, date
 import math
 import requests  # 외부 api 호출용
@@ -181,91 +182,54 @@ class StoreListView(APIView):
 
         # 최종적으로 필터링된 아이템 쿼리셋
         filtered_items_qs = active_items_qs.filter(store_id__in=final_store_ids)
-
-        # for문 밖에 모든 StoreCoordinate를 한 번에 가져와 딕셔너리로 저장
-        store_coordinates_qs = StoreCoordinate.objects.filter(
-            store_id__in=list(final_store_ids)
-        ).values('store_id', 'store_x', 'store_y')
-
-        # store_id를 키로 하는 좌표 딕셔너리 생성
+        
+        # 각 가게별로 최대 할인 아이템 선택
+        ranked_items_qs = filtered_items_qs.annotate(
+            discount_amount=ExpressionWrapper(F("menu__menu_price") * F("max_discount_rate"), output_field=FloatField())
+        ).annotate(
+            rank=Window(
+                expression=RowNumber(),
+                partition_by=[F('store_id')],
+                order_by=[F('discount_amount').desc(), F('menu__menu_price').asc(), F('item_id').asc()]
+            )
+        ).select_related(
+            "store", "menu"
+        )
+        final_items = list(ranked_items_qs.filter(rank=1))
+        
+        # for문 밖에서 모든 StoreCoordinate, UserLike 정보를 한 번에 가져와 딕셔너리로 저장
         store_coords_dict = {
             item['store_id']: [item['store_x'], item['store_y']]
-            for item in store_coordinates_qs
+            for item in StoreCoordinate.objects.filter(store_id__in=list(final_store_ids))
+                .values('store_id', 'store_x', 'store_y')
         }
 
-        # 6. store별 최대 할인율 계산 (할인율 큰 순 정렬을 위해 max_discount_rate, 할인금액 계산 필드 추가)
-        # 할인 금액 컬럼(ExpressionWrapper) 추가
-        discount_amount_expr = ExpressionWrapper(
-            F("menu__menu_price") * F("max_discount_rate"), output_field=FloatField()
-        )
-
-        max_discount_items = (
-            filtered_items_qs.annotate(discount_amount=discount_amount_expr)
-            .values("store_id")
-            .annotate(
-                max_discount_rate=Max("max_discount_rate"),
-                max_discount_amount=Max("discount_amount"),
-            )
-        )
-
-        # 7. 최대 할인 금액 기준 오름차순 정렬 후 각 store별 최대 할인율 아이템 선택
+        liked_stores_dict = {
+            like.store_id: like.like_id
+            for like in UserLike.objects.filter(user=user, store_id__in=list(final_store_ids))
+        }
+    
+        # 4. 루프를 돌면서 한 번에 처리
         results = []
-        use_cheaper_on_tie = True  # 할인액이 같으면 더 저렴한 메뉴 선택 판단
 
-        for discount_data in max_discount_items:
-            store_id = discount_data["store_id"]
-            max_rate = discount_data["max_discount_rate"]
-            max_amount = discount_data["max_discount_amount"]
-
-            # 할인율, 할인액 기준 필터
-            candidate_items = filtered_items_qs.filter(
-                store_id=store_id,
-                max_discount_rate=max_rate,
-            ).annotate(discount_amount=discount_amount_expr)
-
-            if use_cheaper_on_tie:
-                item = (
-                    candidate_items.order_by(
-                        "-discount_amount",  # 할인액 큰 순
-                        "menu__menu_price",  # 메뉴 가격 낮은 순
-                        "item_id",
-                    )
-                    .select_related("store", "menu")
-                    .first()
-                )
-            else:
-                item = (
-                    candidate_items.order_by("-discount_amount", "item_id")
-                    .select_related("store", "menu")
-                    .first()
-                )
-
-            if not item:
-                continue
-
+        for item in final_items:
             store = item.store
-            #store_address = getattr(store, "store_address", None)
-            # 3. 딕셔너리에서 좌표 정보 가져와서 사용
+            store_id = store.store_id
+            
             store_address = store_coords_dict.get(store_id)
-
-            # 거리, 도보 계산 (기존 로직 유지)
+            
+            distance = 0
+            on_foot = 0
             if user_address and store_address:
                 distance_km, walk_time_min = get_distance_walktime_with_coor(
                     store_address, user_address
                 )
                 distance = int(distance_km * 1000) if distance_km is not None else 0
                 on_foot = int(walk_time_min) if walk_time_min is not None else 0
-            else:
-                distance = 0
-                on_foot = 0
 
-            # 찜 정보 조회 (기존 로직 유지)
-            is_liked, liked_id = False, 0
-            like = UserLike.objects.filter(user=user, store=store).first()
-            if like:
-                is_liked = True
-                liked_id = like.like_id
-
+            is_liked = store_id in liked_stores_dict
+            liked_id = liked_stores_dict.get(store_id, 0)
+            
             results.append(
                 {
                     "store_id": store_id,
@@ -286,7 +250,7 @@ class StoreListView(APIView):
                 }
             )
 
-        # 거리 오름차순 정렬
+        # 마지막으로 거리 오름차순 정렬
         results.sort(key=lambda x: x["distance"])
         return Response(results)
 
