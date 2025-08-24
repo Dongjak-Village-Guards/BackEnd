@@ -63,6 +63,7 @@ class Command(BaseCommand):
             return
         elif record_count < 10:
             self.stdout.write(f"학습 데이터 부족 (신규 {record_count} 건)")
+        self.stdout.write(f"필터링된 학습 대상 레코드 수: {record_count}")
 
         # 최신 100개 데이터만 사용
         records = queryset.order_by("-created_at")[:100]
@@ -75,7 +76,6 @@ class Command(BaseCommand):
         # 메뉴별 dp_weight 변동 사항 저장용 딕셔너리 추가
         menu_weight_updates = {}
 
-        # 경사 하강법으로 전역 파라미터 업데이트
         for _ in range(self.epochs):
             for r in records:
                 store_item = store_item_map.get(r.store_item_id)
@@ -83,13 +83,19 @@ class Command(BaseCommand):
                     continue
 
                 sold = r.sold
-                w = store_item.menu.dp_weight  # 메뉴별 가중치는 그대로 사용
-                t = r.time_offset_idx  # 시간 인덱스 사용
+                w = store_item.menu.dp_weight
+                t = r.time_offset_idx
 
                 price = r.record_item_price * (1 - r.record_discount_rate)
-                p_n = price / 1000.0
+                cost = store_item.menu.menu_price * 0.7  # 원가 70% 고정
 
-                z = a + b * p_n + gamma * t + w
+                # 원가 반영 할인율 학습 변수 (가격에서 원가 차이)
+                p_n = (price - cost) / 1000.0
+
+                # 시간 인덱스 스케일링 (예: 10으로 나눠서 감쇠)
+                t_scaled = t / 10.0
+
+                z = a + b * p_n + gamma * t_scaled + w
                 p = sigmoid(z)
 
                 weight = 2.0 if sold == 1 else 1.0
@@ -97,14 +103,43 @@ class Command(BaseCommand):
 
                 a -= self.lr * delta
                 b -= self.lr * delta * p_n
-                gamma -= self.lr * delta * t
+                gamma -= self.lr * delta * t_scaled
 
-                # dp_weight 업데이트 추가
                 w -= self.lr * delta
 
-                # 변경된 weight를 저장할 메뉴별 딕셔너리에 반영
                 menu_id = store_item.menu.menu_id
                 menu_weight_updates[menu_id] = w
+
+        # # 경사 하강법으로 전역 파라미터 업데이트
+        # for _ in range(self.epochs):
+        #     for r in records:
+        #         store_item = store_item_map.get(r.store_item_id)
+        #         if not store_item:
+        #             continue
+
+        #         sold = r.sold
+        #         w = store_item.menu.dp_weight  # 메뉴별 가중치는 그대로 사용
+        #         t = r.time_offset_idx  # 시간 인덱스 사용
+
+        #         price = r.record_item_price * (1 - r.record_discount_rate)
+        #         p_n = price / 1000.0
+
+        #         z = a + b * p_n + gamma * t + w
+        #         p = sigmoid(z)
+
+        #         weight = 2.0 if sold == 1 else 1.0
+        #         delta = (p - sold) * weight
+
+        #         a -= self.lr * delta
+        #         b -= self.lr * delta * p_n
+        #         gamma -= self.lr * delta * t
+
+        #         # dp_weight 업데이트 추가
+        #         w -= self.lr * delta
+
+        #         # 변경된 weight를 저장할 메뉴별 딕셔너리에 반영
+        #         menu_id = store_item.menu.menu_id
+        #         menu_weight_updates[menu_id] = w
 
         # 학습된 전역 파라미터 저장
         global_param.beta0 = a
