@@ -1,4 +1,4 @@
-from config.kakaoapi import get_distance_walktime, get_coordinates
+from config.kakaoapi import get_distance_walktime, get_coordinates, get_distance_walktime_with_coor
 
 from django.shortcuts import render
 
@@ -12,7 +12,7 @@ import math
 import requests  # 외부 api 호출용
 import random  # 더미 데이터 랜덤 선택용!
 
-from .models import Store, StoreItem, StoreSpace, StoreMenu, StoreMenuSpace, StoreSlot
+from .models import Store, StoreItem, StoreSpace, StoreMenu, StoreMenuSpace, StoreSlot, StoreCoordinate
 from reservations.models import UserLike, Reservation
 from records.models import ItemRecord
 from config.kakaoapi import change_to_cau
@@ -120,9 +120,13 @@ class StoreListView(APIView):
         user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-        User = get_user_model()
-        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
-        user_address = fresh_user.user_address
+        if not user.user_address:
+            return Response(
+                {"error": "사용자 주소 정보가 필요합니다."}, status=400
+            )  # 주소 필요시 400 반환
+        
+        user_x, user_y = get_coordinates(user.user_address)
+        user_address = [user_x, user_y]
 
         # 필수 파라미터 확인할 것!
         try:
@@ -132,11 +136,6 @@ class StoreListView(APIView):
         if not 0 <= time_filter <= 36:
             return Response({"error": "time은 0~36 사이여야 합니다."}, status=400)
 
-        if not user_address:
-            return Response(
-                {"error": "사용자 주소 정보가 필요합니다."}, status=400
-            )  # 주소 필요시 400 반환
-
         category = request.GET.get("store_category", None)
         today = datetime.now().date()
         target_date = today
@@ -145,7 +144,9 @@ class StoreListView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        # 기존 필터 조건에서 item_stock__gt=0 제거 —> 재고 0인 아이템 확인해야 하므로 따로 처리
+        # 기존 코드에서 1번, 2번, 3번, 4번, 5번 과정을 모두 생략
+        # 6번 과정부터 시작
+        #StoreItem 조회는 그대로 유지하되, 재고(item_stock)가 0보다 큰 것만 필터링
         base_filters = {
             "item_reservation_date": target_date,
             "item_reservation_time": target_time,
@@ -157,31 +158,40 @@ class StoreListView(APIView):
             if normalized_category != "":
                 base_filters["store__store_category__iexact"] = normalized_category
 
-        # 1. 모든 StoreItem 조회 (재고 0 포함)
-        all_items_qs = StoreItem.objects.filter(**base_filters).select_related(
+        # 활성화된 아이템만 필터링 (재고 > 0)
+        active_items_qs = StoreItem.objects.filter(**base_filters, item_stock__gt=0).select_related(
             "store", "menu", "space"
         )
 
-        # 2. space별로 재고 0인 item 존재 여부 집계 -> 비활성 Space 판단
-        space_stock_zeros = (
-            all_items_qs.values("space_id", "store_id")
-            .annotate(zero_stock_count=Count("item_id", filter=Q(item_stock=0)))
-            .filter(zero_stock_count__gt=0)
-        )
-
-        # 비활성화된 space id 집합
-        inactive_space_ids = set(space["space_id"] for space in space_stock_zeros)
-
-        # 3. 활성화된 StoreItem만 필터링 (해당 시간대 + 재고 > 0 + space_id not in 비활성 space)
-        active_items_qs = all_items_qs.filter(item_stock__gt=0).exclude(
-            space_id__in=inactive_space_ids
-        )
-
-        # 4. 활성화된 space가 한 개라도 있는 store_id 집합
+        # 활성화된 Store가 한 개라도 있는 store_id 집합
         active_store_ids = active_items_qs.values_list("store_id", flat=True).distinct()
 
-        # 5. 그 store_id에 해당하는 StoreItem만 필터링
-        filtered_items_qs = active_items_qs.filter(store_id__in=active_store_ids)
+        # 슬롯이 모두 예약되지 않은 Store의 ID 집합을 구하는 쿼리
+        # StoreSlot에서 is_reserved가 False인 슬롯이 하나라도 있는 space를 찾고,
+        # 해당 space를 가진 store를 찾습니다.
+        available_slot_stores = StoreSlot.objects.filter(
+            slot_reservation_date=target_date,
+            slot_reservation_time=target_time,
+            is_reserved=False
+        ).values_list('space__store_id', flat=True)
+
+        # active_store_ids와 available_slot_stores의 교집합을 구합니다.
+        # 이렇게 하면 아이템 재고가 있고, 동시에 예약 가능한 슬롯이 있는 가게만 남게 됩니다.
+        final_store_ids = set(active_store_ids) & set(available_slot_stores)
+
+        # 최종적으로 필터링된 아이템 쿼리셋
+        filtered_items_qs = active_items_qs.filter(store_id__in=final_store_ids)
+
+        # for문 밖에 모든 StoreCoordinate를 한 번에 가져와 딕셔너리로 저장
+        store_coordinates_qs = StoreCoordinate.objects.filter(
+            store_id__in=list(final_store_ids)
+        ).values('store_id', 'store_x', 'store_y')
+
+        # store_id를 키로 하는 좌표 딕셔너리 생성
+        store_coords_dict = {
+            item['store_id']: [item['store_x'], item['store_y']]
+            for item in store_coordinates_qs
+        }
 
         # 6. store별 최대 할인율 계산 (할인율 큰 순 정렬을 위해 max_discount_rate, 할인금액 계산 필드 추가)
         # 할인 금액 컬럼(ExpressionWrapper) 추가
@@ -234,11 +244,13 @@ class StoreListView(APIView):
                 continue
 
             store = item.store
-            store_address = getattr(store, "store_address", None)
+            #store_address = getattr(store, "store_address", None)
+            # 3. 딕셔너리에서 좌표 정보 가져와서 사용
+            store_address = store_coords_dict.get(store_id)
 
             # 거리, 도보 계산 (기존 로직 유지)
             if user_address and store_address:
-                distance_km, walk_time_min = get_distance_walktime(
+                distance_km, walk_time_min = get_distance_walktime_with_coor(
                     store_address, user_address
                 )
                 distance = int(distance_km * 1000) if distance_km is not None else 0
@@ -253,22 +265,6 @@ class StoreListView(APIView):
             if like:
                 is_liked = True
                 liked_id = like.like_id
-
-            # spaces 들의 목록을 보여줄 때
-            is_available = False
-            spaces = StoreSpace.objects.filter(store=store)
-            for space in spaces:
-                slot = get_object_or_404(
-                    StoreSlot,
-                    space=space,
-                    slot_reservation_date=target_date,
-                    slot_reservation_time=target_time,
-                )
-                if slot.is_reserved == False:
-                    is_available = True
-                    break
-            if is_available == False:
-                continue
 
             results.append(
                 {
@@ -1625,3 +1621,57 @@ class OwnerStatic(APIView):
 
         # 그러면 이제 과거 리스트에서 얻어낸 total_revenue의 value와 현재 리스트의 것 비교해서 상승룰(delta) 구하기
         # total_reservation_count 도 그렇게 하기
+
+# StoreCoordinate 좌표 채우기 (전체)
+class MakeAllCoordinates(APIView):
+    permission_classes = [IsAdminRole]
+
+    def post(self, request):
+        try:
+            stores = Store.objects.all() # 모든 store 다 가져오기
+            for store in stores:
+                # 이미 좌표 데이터가 존재하는 지 확인
+                if not StoreCoordinate.objects.filter(store_id=store.store_id).exists():
+                    address = getattr(store, "store_address", None)
+                    if address:
+                        x,y = get_coordinates(address)
+                        if x and y:
+                            StoreCoordinate.objects.create(
+                                store_id=store.store_id,
+                                store_x=float(x),
+                                store_y=float(y)
+                            )
+                        else:
+                            # 좌표 변환 실패 시
+                            print(f"좌표 변환 실패:{store.store_name}({address})")
+            return Response({"message":"모든 가게의 좌표 데이터 생성을 완료했습니다."}, status = status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+# StoreCoordiante 좌표 채우기 (단일) -> 이후 가게 추가하는 상황 고려
+class MakeOneCoordinate(APIView):
+    permission_classes = [IsAdminRole]
+    
+    def post(self, request, store_id):
+        try:
+            store = get_object_or_404(Store, store_id = store_id) # 모든 store 다 가져오기
+            # 이미 좌표 데이터가 존재하는 지 확인
+            if not StoreCoordinate.objects.filter(store_id=store.store_id).exists():
+                address = getattr(store, "store_address", None)
+                if address:
+                    x,y = get_coordinates(address)
+                    if x and y:
+                        StoreCoordinate.objects.create(
+                            store_id=store.store_id,
+                            store_x=float(x),
+                            store_y=float(y)
+                        )
+                    else:
+                        # 좌표 변환 실패 시
+                        print(f"좌표 변환 실패:{store.store_name}({address})")
+            return Response({"message": f"store_id : {store.store_id} 인 가게의 좌표 데이터 생성을 완료했습니다."}, status = 201)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

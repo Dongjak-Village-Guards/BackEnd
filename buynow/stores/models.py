@@ -109,3 +109,9 @@ class StoreSlot(BaseModel):
 
     class Meta:
         unique_together = ("space", "slot_reservation_date", "slot_reservation_time")
+
+class StoreCoordinate(BaseModel):
+    coordinate_id = models.AutoField(primary_key=True)
+    store_id = models.PositiveIntegerField()
+    store_x = models.FloatField()
+    store_y = models.FloatField()
