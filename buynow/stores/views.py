@@ -431,9 +431,8 @@ class StoreSpacesDetailView(APIView):
         user = request.user
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-        User = get_user_model()
-        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
-        user_address = fresh_user.user_address
+        user_x, user_y = get_coordinates(user.user_address)
+        user_address = [user_x,user_y]
 
         # 필수 쿼리 파라미터 확인
         try:
@@ -466,11 +465,11 @@ class StoreSpacesDetailView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        # user_address = getattr(request.user, "user_address", None)
-        store_address = getattr(store, "store_address", None)
+        store_coor = get_object_or_404(StoreCoordinate, store_id = store_id)
+        store_address = [store_coor.store_x, store_coor.store_y]
 
         if user_address and store_address:
-            distance_km, walk_time_min = get_distance_walktime(
+            distance_km, walk_time_min = get_distance_walktime_with_coor(
                 store_address, user_address
             )
             distance = int(distance_km * 1000) if distance_km is not None else 0
@@ -1315,123 +1314,6 @@ class OwnerStore(APIView):
         )
 
 
-"""    
-# 공급자용 슬롯 확인하기
-class OwnerSlot(APIView):
-    permission_classes = [IsOwnerRole]
-
-    def get(self, request):
-        user = request.user
-        if not user or not user.is_authenticated:
-            return Response({"error": "인증이 필요합니다."}, status=401)
-
-        store_id = request.data.get("store_id")
-        if not store_id:
-            return Response({"error": "store_id가 필요합니다."}, status=400)
-
-        # store_id에 해당하는 모든 space 정보 가져오기
-        try:
-            spaces = StoreSpace.objects.filter(store_id=store_id)
-        except Store.DoesNotExist:
-            return Response({"error": "해당하는 스토어를 찾을 수 없습니다."}, status=404)
-
-        today = date.today()
-        tomorrow = today + timedelta(days=1)
-        now = datetime.now().time()
-
-        today_spaces_data = []
-        tomorrow_spaces_data = []
-
-        # 슬롯 데이터를 처리하는 헬퍼 함수
-        def process_slots(slot_queryset):
-            slots_data = []
-            for slot in slot_queryset:
-                reservation_info = None
-                is_reserved = False
-
-                # 예약이 있는지 확인
-                try:
-                    reservation = Reservation.objects.get(reservation_slot=slot)
-                    is_reserved = True
-                    
-                    # 예약이 있을 경우, 예약 정보 구성
-                    # reservation.store_item이 ReservationItem 모델에 대한 OneToOne 필드라고 가정
-                    reservation_item = reservation.store_item
-                    
-                    menu_name = None
-                    if reservation_item:
-                        # 메뉴 이름 가져오기.
-                        try:
-                            # reservation_item.menu가 Menu 모델에 대한 OneToOne 필드라고 가정
-                            menu_name = reservation_item.menu.menu_name
-                        except StoreMenu.DoesNotExist:
-                            # 관련 메뉴가 없을 경우
-                            print(f"Warning: Menu not found for item_id {reservation_item.item_id}")
-                            menu_name = None # 또는 "알 수 없는 메뉴"와 같이 설정
-
-                    reservation_info = {
-                        "reservation_id": reservation.reservation_id,
-                        "item_id": reservation_item.item_id if reservation_item else None,
-                        "user_email": reservation.user.user_email,
-                        "menu_name": menu_name
-                    }
-                except Reservation.DoesNotExist:
-                    # 예약이 없으면 수동 마감 상태 확인
-                    is_reserved = slot.is_reserved
-
-                slots_data.append({
-                    "slot_id": slot.slot_id,
-                    "time": slot.slot_reservation_time.strftime("%H:%M"),
-                    "is_reserved": is_reserved,
-                    "reservation_info": reservation_info,
-                })
-            return slots_data
-
-        for space in spaces:
-            # 오늘 슬롯 (현재 시간 이후)
-            today_slots = StoreSlot.objects.filter(
-                space=space,
-                slot_reservation_date=today,
-                slot_reservation_time__gte=now
-            ).order_by('slot_reservation_time')
-            today_slots_data = process_slots(today_slots)
-            
-            today_spaces_data.append({
-                "space_id": space.space_id,
-                "space_name": space.space_name,
-                "space_image_url": space.space_image_url,
-                "slots": today_slots_data
-            })
-
-            # 내일 슬롯
-            tomorrow_slots = StoreSlot.objects.filter(
-                space=space,
-                slot_reservation_date=tomorrow
-            ).order_by('slot_reservation_time')
-            tomorrow_slots_data = process_slots(tomorrow_slots)
-
-            tomorrow_spaces_data.append({
-                "space_id": space.space_id,
-                "space_name": space.space_name,
-                "space_image_url": space.space_image_url,
-                "slots": tomorrow_slots_data
-            })
-        
-        response_data = {
-            "dates": [
-                {
-                    "date": "today",
-                    "spaces": today_spaces_data
-                },
-                {
-                    "date": "tomorrow",
-                    "spaces": tomorrow_spaces_data
-                }
-            ]
-        }
-        return Response(response_data)"""
-
-
 class OwnerStatic(APIView):
     permission_classes = [IsOwnerRole]
 
@@ -1555,11 +1437,15 @@ class OwnerStatic(APIView):
             "item_id", flat=True
         )
 
-        # 최근 day일 동안 생성된 ItemRecord 가져오기
-        record_start_date = today - timedelta(days=day)
+
+        day_three = day - 5
+        # 최근 day + 3 일 동안 생성된 ItemRecord 가져오기
+        record_start_date = today - timedelta(days=day_three)
         item_records = ItemRecord.objects.filter(
             store_item_id__in=store_item_ids,
             created_at__gte=record_start_date,  # BaseModel 상속받았으니 created_at 존재한다고 가정
+            record_stock = 0,
+            sold = 1,
         ).values("time_offset_idx", "record_discount_rate", "created_at")
 
         time_dix_discount_rate = [
@@ -1604,22 +1490,6 @@ class OwnerStatic(APIView):
         }
 
         return Response(response_data)
-
-        # -----------------------------------------------------------
-        # reservation 개수 가져와서 -> total_reservations_count 에 넣기
-
-        # 그리고 리스트당 각 reservation 계산하기
-
-        ## 일단 reservation_cost 가져와서 total_discount_amount 에 넣기
-        ## item 참고해서, 정가를 total_price 에 넣기
-        ## item 참고해서, menu 알아내고, 그 menu 리스트에 해당하면 +1 하기
-        ## 그리고 reservation의 slot 참고해서, 해당 시간(0~23) 리스트에 +1 더하기
-
-        # 그렇게 다 하면, total_price(정가) - total_discount_amount(할인한 가격) 를 빼서, 최종 판매 가격인 total_revenue의 value 에 넣기.
-
-        # 그러면 이제 과거 리스트에서 얻어낸 total_revenue의 value와 현재 리스트의 것 비교해서 상승룰(delta) 구하기
-        # total_reservation_count 도 그렇게 하기
-
 
 # StoreCoordinate 좌표 채우기 (전체)
 class MakeAllCoordinates(APIView):
