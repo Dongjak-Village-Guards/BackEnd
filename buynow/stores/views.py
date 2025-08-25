@@ -269,8 +269,9 @@ class StoreListView(APIView):
                     "max_discount_menu": item.menu.menu_name,
                     "max_discount_price_origin": item.menu.menu_price,
                     "max_discount_price": int(
-                        item.menu.menu_price
-                        * (1 - item.current_discount_rate)  # max -> current
+                        (item.menu.menu_price * (1 - item.current_discount_rate))
+                        // 100
+                        * 100  # 100 단위 절사
                     ),
                     "is_liked": is_liked,
                     "liked_id": liked_id,
@@ -347,7 +348,7 @@ class NumOfSpacesView(APIView):
         )
 
 
-class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고르기
+class StoreSpacesDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요
 
     @swagger_auto_schema(
@@ -721,7 +722,8 @@ class StoreSpaceDetailView(APIView):
                         "menu_price": menu.menu_price,
                         "item_id": None,
                         "discount_rate": 0,
-                        "discounted_price": menu.menu_price,
+                        "discounted_price": (menu.menu_price // 100)
+                        * 100,  # 100단위 절사
                         "is_available": False,
                     }
                 )
@@ -730,11 +732,15 @@ class StoreSpaceDetailView(APIView):
             # 메뉴별 StoreItem 여러개 모두 처리
             for item in store_items:
                 # 수정 - current_discount_rate 사용
-                discounted_price = (
-                    int(menu.menu_price * (1 - item.current_discount_rate))
-                    if item.current_discount_rate
-                    else menu.menu_price
-                )
+                if item.current_discount_rate:
+                    discounted_price = int(
+                        menu.menu_price * (1 - item.current_discount_rate)
+                    )
+                    discounted_price = (
+                        discounted_price // 100
+                    ) * 100  # 100원 단위 내림 처리
+                else:
+                    discounted_price = menu.menu_price
                 menus_data.append(
                     {
                         "menu_id": menu.menu_id,
@@ -942,7 +948,8 @@ class StoreSingleSpaceDetailView(APIView):
             )
             if item:
                 discounted_price = (
-                    int(menu.menu_price * (1 - item.current_discount_rate))
+                    (int(menu.menu_price * (1 - item.current_discount_rate)) // 100)
+                    * 100
                     if item.current_discount_rate
                     else menu.menu_price
                 )
@@ -1176,7 +1183,7 @@ class StoreItemDetailView(APIView):
             int(item.current_discount_rate * 100) if item.current_discount_rate else 0
         )
         discounted_price = (
-            int(menu.menu_price * (1 - item.current_discount_rate))
+            (int(menu.menu_price * (1 - item.current_discount_rate)) // 100) * 100
             if item.current_discount_rate
             else menu.menu_price
         )

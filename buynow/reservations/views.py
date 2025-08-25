@@ -172,7 +172,8 @@ class ReserveList(APIView):
                         {"error": "가격 또는 할인율 정보가 없습니다."}, status=400
                     )
                 discounted_cost = (
-                    price_original * item.current_discount_rate # 원가 * 할인율 = 할인된 금액
+                    price_original
+                    * item.current_discount_rate  # 원가 * 할인율 = 할인된 금액
                 )
 
                 # 예약 생성
@@ -246,14 +247,18 @@ class ReserveDetail(APIView):
 
         # 예약 시간이 reservation.reservation_slot_id의 예약 날짜+시간
         slot = reservation.reservation_slot
-        #if not slot or not slot.slot_reservation_date or not slot.slot_reservation_time:
+        # if not slot or not slot.slot_reservation_date or not slot.slot_reservation_time:
         #    return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
         if not slot:
-            return Response({"error": "slot이 존재하지않습니다."},status=400)
+            return Response({"error": "slot이 존재하지않습니다."}, status=400)
         if not slot.slot_reservation_date:
-            return Response({"error":"slot_reservation_date 가 존재하지않음."},status=400)
-        if slot.slot_reservation_time is None :
-            return Response({"error":"slot_reservation_time 가 존재하지않음."},status = 400)
+            return Response(
+                {"error": "slot_reservation_date 가 존재하지않음."}, status=400
+            )
+        if slot.slot_reservation_time is None:
+            return Response(
+                {"error": "slot_reservation_time 가 존재하지않음."}, status=400
+            )
 
         # 예약 datetime 생성
         reservation_datetime = datetime.combine(
@@ -424,9 +429,9 @@ class LikeDetail(APIView):
         category_filter = request.query_params.get("store_category")
 
         # 기본 시간: 현재 시간의 정각
-        #if not time_filter:
+        # if not time_filter:
         #    time_filter = datetime.now().hour
-        #else:
+        # else:
         #    time_filter = int(time_filter)
 
         # time_filter 값에 따라 날짜와 시간을 동적으로 설정
@@ -434,7 +439,12 @@ class LikeDetail(APIView):
             if time_param is not None:
                 time_filter = int(time_param)
                 if not 0 <= time_filter <= 36:
-                    return Response({"error": "유효하지 않은 시간 값입니다. 0부터 36 사이의 값을 입력해주세요."}, status=400)
+                    return Response(
+                        {
+                            "error": "유효하지 않은 시간 값입니다. 0부터 36 사이의 값을 입력해주세요."
+                        },
+                        status=400,
+                    )
             else:
                 time_filter = datetime.now().hour
         except ValueError:
@@ -448,7 +458,6 @@ class LikeDetail(APIView):
         else:
             reservation_date = date.today()
             reservation_time_for_items = time_filter
-
 
         # 찜한 매장 가져오기
         user_likes = (
@@ -468,13 +477,16 @@ class LikeDetail(APIView):
                 continue
 
             # StoreItem에서 예약 가능 여부 확인
-            
+
             items = StoreItem.objects.filter(
-                store=store, item_reservation_date = reservation_date, item_reservation_time=reservation_time_for_items, item_stock__gt=0
+                store=store,
+                item_reservation_date=reservation_date,
+                item_reservation_time=reservation_time_for_items,
+                item_stock__gt=0,
             ).select_related("menu")
 
             # 모든 space의 slot중 time_filter에 해당하는 거 찾고, 그 slot의 is_reserved가 다 true면 is_available은 false
-            #today = date.today()
+            # today = date.today()
             is_available = False
 
             spaces = StoreSpace.objects.filter(store=store)
@@ -508,8 +520,8 @@ class LikeDetail(APIView):
                     "store_id": store.store_id,
                     "created_at": like.created_at,
                     "store_name": store.store_name,
-                    "distance": distance,  # TODO 실제 거리 계산 로직 필요
-                    "on_foot": on_foot,  # TODO 실제 도보 시간 계산 로직 필요
+                    "distance": distance,
+                    "on_foot": on_foot,
                     "store_image_url": store.store_image_url,
                     "menu_name": (
                         max_discount_item.menu.menu_name if max_discount_item else None
@@ -529,8 +541,14 @@ class LikeDetail(APIView):
                         max_discount_item.menu.menu_price if max_discount_item else None
                     ),
                     "max_discount_price": (
-                        max_discount_item.menu.menu_price
-                        * (1 - max_discount_item.current_discount_rate)
+                        int(
+                            (
+                                max_discount_item.menu.menu_price
+                                * (1 - max_discount_item.current_discount_rate)
+                            )
+                            // 100
+                        )
+                        * 100
                         if max_discount_item
                         else None
                     ),
@@ -594,7 +612,7 @@ class OwnerReservation(APIView):
 
         store = get_object_or_404(Store, store_id=store_id)
         if store.store_owner != user:
-            return Response({"error":"가게 주인이 아닙니다."}, status = 403)
+            return Response({"error": "가게 주인이 아닙니다."}, status=403)
 
         # store_id에 해당하는 모든 space 정보 가져오기
         try:
@@ -694,29 +712,23 @@ class OwnerReservation(APIView):
             )
 
         response_data = {
-            "today" : {
-                "spaces" : today_spaces_data
-            },
-            "tomorrow" : {
-                "spaces" : tomorrow_spaces_data
-            }
+            "today": {"spaces": today_spaces_data},
+            "tomorrow": {"spaces": tomorrow_spaces_data},
         }
         return Response(response_data)
 
-    
 
 # 공급자용 예약 취소
 class OwnerReservationDetail(APIView):
     permission_classes = [IsOwnerRole]
 
     # 예약 취소
-    def delete(self,request, slot_id, reservation_id):
+    def delete(self, request, slot_id, reservation_id):
         user = request.user
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-        
-        
-        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+
+        slot = get_object_or_404(StoreSlot, slot_id=slot_id)
 
         if slot.is_reserved == False:  # 예약이 아직 안되어있다는 거니까.
             return Response(
@@ -747,7 +759,7 @@ class OwnerReservationDetail(APIView):
             slot.is_reserved = False
             slot.save()
 
-        return Response({"message" : "예약 취소 성공"}, status=200)
+        return Response({"message": "예약 취소 성공"}, status=200)
 
 
 # 공급자용 make slot closed
@@ -759,8 +771,7 @@ class OwnerClosed(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        
-        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+        slot = get_object_or_404(StoreSlot, slot_id=slot_id)
 
         # 예약 가능한 (예약 안된) slot을 예약 못하게 하는거니까.
         if (
@@ -787,8 +798,7 @@ class OwnerOpen(APIView):
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
 
-        
-        slot = get_object_or_404(StoreSlot, slot_id = slot_id)
+        slot = get_object_or_404(StoreSlot, slot_id=slot_id)
 
         # 수동 마감(예약 안되게끔) 했던 slot을 예약 가능하게 하는거니까.
         if slot.is_reserved == False:  # false 면 이미 예약해도 되는 거니까 잘못된거지.
