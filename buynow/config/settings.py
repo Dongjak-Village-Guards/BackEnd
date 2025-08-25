@@ -163,7 +163,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "ko-kr"
 
-TIME_ZONE = "Asia/Seoul"  # TODO 여차하면 UTC로 바꾸기
+TIME_ZONE = "Asia/Seoul"
 
 USE_I18N = True
 
