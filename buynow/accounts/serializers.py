@@ -95,6 +95,7 @@ class AdminLoginSerializer(serializers.Serializer):
         refresh = RefreshToken.for_user(user)
         return str(refresh.access_token), str(refresh)
 
+
 # 공급자 회원가입/로그인 관련 시리얼라이저
 class OwnerLoginSerializer(serializers.Serializer):
     owner_email = serializers.CharField()
@@ -103,23 +104,27 @@ class OwnerLoginSerializer(serializers.Serializer):
     def validate(self, attrs):
         email = attrs.get("owner_email")
         password = attrs.get("owner_password")
-        try :
+        try:
             user = User.objects.get(user_email=email)
         except User.DoesNotExist:
-            raise serializers.ValidationError({"detail" : "이메일 또는 비밀번호가 올바르지 않습니다."})
-        
+            raise serializers.ValidationError(
+                {"detail": "이메일 또는 비밀번호가 올바르지 않습니다."}
+            )
+
         if not check_password(password, user.password):
-            raise serializers.ValidationError({"detail" : "이메일 또는 비밀번호가 올바르지 않습니다."})
+            raise serializers.ValidationError(
+                {"detail": "이메일 또는 비밀번호가 올바르지 않습니다."}
+            )
 
         if user.user_role != "owner":
-            raise serializers.ValidationError({"detail" : "공급자 계정이 아닙니다."})
+            raise serializers.ValidationError({"detail": "공급자 계정이 아닙니다."})
 
         access_token, refresh_token = self._generate_tokens(user)
         return {
             "user": user,
-            "user_id" : user.id,
-            "user_email" : user.user_email,
-            "user_role" : "owner",
+            "user_id": user.id,
+            "user_email": user.user_email,
+            "user_role": "owner",
             "access_token": access_token,
             "refresh_token": refresh_token,
         }
@@ -129,7 +134,7 @@ class OwnerLoginSerializer(serializers.Serializer):
         return str(refresh.access_token), str(refresh)
 
 
-# User API 관련 시리얼라이저 --------------------------------------------
+# User API 관련 시리얼라이저
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

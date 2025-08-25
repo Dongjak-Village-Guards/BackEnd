@@ -1,4 +1,8 @@
-from config.kakaoapi import get_distance_walktime, get_coordinates
+from config.kakaoapi import (
+    get_distance_walktime,
+    get_coordinates,
+    get_distance_walktime_with_coor,
+)
 
 from django.shortcuts import render
 
@@ -6,13 +10,22 @@ from accounts.permissions import IsUserRole, IsAdminRole, IsOwnerRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField
+from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField, Window, Prefetch
+from django.db.models.functions import RowNumber
 from datetime import datetime, timedelta, date
 import math
 import requests  # 외부 api 호출용
 import random  # 더미 데이터 랜덤 선택용!
 
-from .models import Store, StoreItem, StoreSpace, StoreMenu, StoreMenuSpace, StoreSlot
+from .models import (
+    Store,
+    StoreItem,
+    StoreSpace,
+    StoreMenu,
+    StoreMenuSpace,
+    StoreSlot,
+    StoreCoordinate,
+)
 from reservations.models import UserLike, Reservation
 from records.models import ItemRecord
 from config.kakaoapi import change_to_cau
@@ -120,9 +133,13 @@ class StoreListView(APIView):
         user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-        User = get_user_model()
-        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
-        user_address = fresh_user.user_address
+        if not user.user_address:
+            return Response(
+                {"error": "사용자 주소 정보가 필요합니다."}, status=400
+            )  # 주소 필요시 400 반환
+
+        user_x, user_y = get_coordinates(user.user_address)
+        user_address = [user_x, user_y]
 
         # 필수 파라미터 확인할 것!
         try:
@@ -132,11 +149,6 @@ class StoreListView(APIView):
         if not 0 <= time_filter <= 36:
             return Response({"error": "time은 0~36 사이여야 합니다."}, status=400)
 
-        if not user_address:
-            return Response(
-                {"error": "사용자 주소 정보가 필요합니다."}, status=400
-            )  # 주소 필요시 400 반환
-
         category = request.GET.get("store_category", None)
         today = datetime.now().date()
         target_date = today
@@ -145,7 +157,9 @@ class StoreListView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        # 기존 필터 조건에서 item_stock__gt=0 제거 —> 재고 0인 아이템 확인해야 하므로 따로 처리
+        # 기존 코드에서 1번, 2번, 3번, 4번, 5번 과정을 모두 생략
+        # 6번 과정부터 시작
+        # StoreItem 조회는 그대로 유지하되, 재고(item_stock)가 0보다 큰 것만 필터링
         base_filters = {
             "item_reservation_date": target_date,
             "item_reservation_time": target_time,
@@ -157,118 +171,88 @@ class StoreListView(APIView):
             if normalized_category != "":
                 base_filters["store__store_category__iexact"] = normalized_category
 
-        # 1. 모든 StoreItem 조회 (재고 0 포함)
-        all_items_qs = StoreItem.objects.filter(**base_filters).select_related(
-            "store", "menu", "space"
-        )
+        # 활성화된 아이템만 필터링 (재고 > 0)
+        active_items_qs = StoreItem.objects.filter(
+            **base_filters, item_stock__gt=0
+        ).select_related("store", "menu", "space")
 
-        # 2. space별로 재고 0인 item 존재 여부 집계 -> 비활성 Space 판단
-        space_stock_zeros = (
-            all_items_qs.values("space_id", "store_id")
-            .annotate(zero_stock_count=Count("item_id", filter=Q(item_stock=0)))
-            .filter(zero_stock_count__gt=0)
-        )
-
-        # 비활성화된 space id 집합
-        inactive_space_ids = set(space["space_id"] for space in space_stock_zeros)
-
-        # 3. 활성화된 StoreItem만 필터링 (해당 시간대 + 재고 > 0 + space_id not in 비활성 space)
-        active_items_qs = all_items_qs.filter(item_stock__gt=0).exclude(
-            space_id__in=inactive_space_ids
-        )
-
-        # 4. 활성화된 space가 한 개라도 있는 store_id 집합
+        # 활성화된 Store가 한 개라도 있는 store_id 집합
         active_store_ids = active_items_qs.values_list("store_id", flat=True).distinct()
 
-        # 5. 그 store_id에 해당하는 StoreItem만 필터링
-        filtered_items_qs = active_items_qs.filter(store_id__in=active_store_ids)
+        # 슬롯이 모두 예약되지 않은 Store의 ID 집합을 구하는 쿼리
+        # StoreSlot에서 is_reserved가 False인 슬롯이 하나라도 있는 space를 찾고,
+        # 해당 space를 가진 store를 찾습니다.
+        available_slot_stores = StoreSlot.objects.filter(
+            slot_reservation_date=target_date,
+            slot_reservation_time=target_time,
+            is_reserved=False,
+        ).values_list("space__store_id", flat=True)
 
-        # 6. store별 최대 할인율 계산 (할인율 큰 순 정렬을 위해 max_discount_rate, 할인금액 계산 필드 추가)
-        # 할인 금액 컬럼(ExpressionWrapper) 추가
-        discount_amount_expr = ExpressionWrapper(
-            F("menu__menu_price") * F("max_discount_rate"), output_field=FloatField()
-        )
+        # active_store_ids와 available_slot_stores의 교집합을 구합니다.
+        # 이렇게 하면 아이템 재고가 있고, 동시에 예약 가능한 슬롯이 있는 가게만 남게 됩니다.
+        final_store_ids = set(active_store_ids) & set(available_slot_stores)
 
-        max_discount_items = (
-            filtered_items_qs.annotate(discount_amount=discount_amount_expr)
-            .values("store_id")
-            .annotate(
-                max_discount_rate=Max("max_discount_rate"),
-                max_discount_amount=Max("discount_amount"),
+        # 최종적으로 필터링된 아이템 쿼리셋
+        filtered_items_qs = active_items_qs.filter(store_id__in=final_store_ids)
+
+        # 각 가게별로 최대 할인 아이템 선택
+        ranked_items_qs = (
+            filtered_items_qs.annotate(
+                discount_amount=ExpressionWrapper(
+                    F("menu__menu_price") * F("current_discount_rate"),
+                    output_field=FloatField(),
+                )  # max -> current
             )
+            .annotate(
+                rank=Window(
+                    expression=RowNumber(),
+                    partition_by=[F("store_id")],
+                    order_by=[
+                        F("discount_amount").desc(),
+                        F("menu__menu_price").asc(),
+                        F("item_id").asc(),
+                    ],
+                )
+            )
+            .select_related("store", "menu")
         )
+        final_items = list(ranked_items_qs.filter(rank=1))
 
-        # 7. 최대 할인 금액 기준 오름차순 정렬 후 각 store별 최대 할인율 아이템 선택
+        # for문 밖에서 모든 StoreCoordinate, UserLike 정보를 한 번에 가져와 딕셔너리로 저장
+        store_coords_dict = {
+            item["store_id"]: [item["store_x"], item["store_y"]]
+            for item in StoreCoordinate.objects.filter(
+                store_id__in=list(final_store_ids)
+            ).values("store_id", "store_x", "store_y")
+        }
+
+        liked_stores_dict = {
+            like.store_id: like.like_id
+            for like in UserLike.objects.filter(
+                user=user, store_id__in=list(final_store_ids)
+            )
+        }
+
+        # 4. 루프를 돌면서 한 번에 처리
         results = []
-        use_cheaper_on_tie = True  # 할인액이 같으면 더 저렴한 메뉴 선택 판단
 
-        for discount_data in max_discount_items:
-            store_id = discount_data["store_id"]
-            max_rate = discount_data["max_discount_rate"]
-            max_amount = discount_data["max_discount_amount"]
-
-            # 할인율, 할인액 기준 필터
-            candidate_items = filtered_items_qs.filter(
-                store_id=store_id,
-                max_discount_rate=max_rate,
-            ).annotate(discount_amount=discount_amount_expr)
-
-            if use_cheaper_on_tie:
-                item = (
-                    candidate_items.order_by(
-                        "-discount_amount",  # 할인액 큰 순
-                        "menu__menu_price",  # 메뉴 가격 낮은 순
-                        "item_id",
-                    )
-                    .select_related("store", "menu")
-                    .first()
-                )
-            else:
-                item = (
-                    candidate_items.order_by("-discount_amount", "item_id")
-                    .select_related("store", "menu")
-                    .first()
-                )
-
-            if not item:
-                continue
-
+        for item in final_items:
             store = item.store
-            store_address = getattr(store, "store_address", None)
+            store_id = store.store_id
 
-            # 거리, 도보 계산 (기존 로직 유지)
+            store_address = store_coords_dict.get(store_id)
+
+            distance = 0
+            on_foot = 0
             if user_address and store_address:
-                distance_km, walk_time_min = get_distance_walktime(
+                distance_km, walk_time_min = get_distance_walktime_with_coor(
                     store_address, user_address
                 )
                 distance = int(distance_km * 1000) if distance_km is not None else 0
                 on_foot = int(walk_time_min) if walk_time_min is not None else 0
-            else:
-                distance = 0
-                on_foot = 0
 
-            # 찜 정보 조회 (기존 로직 유지)
-            is_liked, liked_id = False, 0
-            like = UserLike.objects.filter(user=user, store=store).first()
-            if like:
-                is_liked = True
-                liked_id = like.like_id
-
-            # spaces 들의 목록을 보여줄 때
-            is_available = False
-            spaces = StoreSpace.objects.filter(store=store)
-            for space in spaces:
-                slot = get_object_or_404(
-                    StoreSlot,
-                    space=space,
-                    slot_reservation_date=target_date,
-                    slot_reservation_time=target_time,
-                )
-                if slot.is_reserved == False:
-                    is_available = True
-                    break
-            if is_available == False:
-                continue
+            is_liked = store_id in liked_stores_dict
+            liked_id = liked_stores_dict.get(store_id, 0)
 
             results.append(
                 {
@@ -279,18 +263,22 @@ class StoreListView(APIView):
                     "store_image_url": store.store_image_url,
                     "menu_name": item.menu.menu_name,
                     "menu_id": item.menu.menu_id,
-                    "max_discount_rate": int(item.max_discount_rate * 100),
+                    "max_discount_rate": int(
+                        item.current_discount_rate * 100
+                    ),  # max -> current
                     "max_discount_menu": item.menu.menu_name,
                     "max_discount_price_origin": item.menu.menu_price,
                     "max_discount_price": int(
-                        item.menu.menu_price * (1 - item.max_discount_rate)
+                        (item.menu.menu_price * (1 - item.current_discount_rate))
+                        // 100
+                        * 100  # 100 단위 절사
                     ),
                     "is_liked": is_liked,
                     "liked_id": liked_id,
                 }
             )
 
-        # 거리 오름차순 정렬
+        # 마지막으로 거리 오름차순 정렬
         results.sort(key=lambda x: x["distance"])
         return Response(results)
 
@@ -360,7 +348,7 @@ class NumOfSpacesView(APIView):
         )
 
 
-class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고르기
+class StoreSpacesDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요
 
     @swagger_auto_schema(
@@ -443,7 +431,8 @@ class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고�
         user = request.user
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-        user_address = user.user_address
+        user_x, user_y = get_coordinates(user.user_address)
+        user_address = [user_x,user_y]
 
         # 필수 쿼리 파라미터 확인
         try:
@@ -476,11 +465,11 @@ class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고�
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        # user_address = getattr(request.user, "user_address", None)
-        store_address = getattr(store, "store_address", None)
+        store_coor = get_object_or_404(StoreCoordinate, store_id = store_id)
+        store_address = [store_coor.store_x, store_coor.store_y]
 
         if user_address and store_address:
-            distance_km, walk_time_min = get_distance_walktime(
+            distance_km, walk_time_min = get_distance_walktime_with_coor(
                 store_address, user_address
             )
             distance = int(distance_km * 1000) if distance_km is not None else 0
@@ -691,11 +680,24 @@ class StoreSpaceDetailView(APIView):
             target_time = time_int - 24
         selected_time_formatted = f"{target_time}:00"
 
-        # StoreMenuSpace에서 해당 space_id에 연결된 menu들
-        menu_spaces = StoreMenuSpace.objects.filter(space=space)
-        menu_ids = menu_spaces.values_list("menu_id", flat=True).distinct()
+        # StoreMenuSpace, StoreMenu, StoreItem 정보를 한 번의 쿼리로 미리 가져옴
+        menu_spaces = (
+            StoreMenuSpace.objects.filter(space=space)
+            .select_related("menu")
+            .prefetch_related(
+                Prefetch(
+                    "menu__storeitem_set",
+                    queryset=StoreItem.objects.filter(
+                        space=space,
+                        item_reservation_date=target_date,
+                        item_reservation_time=target_time,
+                    ).order_by("-current_discount_rate"),
+                    to_attr="store_items",
+                )
+            )
+        )
 
-        if not menu_ids:
+        if not menu_spaces.exists():
             return Response(
                 {
                     "errorCode": "NO_MENU_AVAILABLE",
@@ -704,26 +706,24 @@ class StoreSpaceDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # 현재 유저가 이 스토어를 찜했는지 확인
+        try:
+            like = UserLike.objects.get(user=user, store=store)
+            is_liked = True
+            liked_id = like.like_id
+        except UserLike.DoesNotExist:
+            is_liked = False
+            liked_id = None
+
         menus_data = []
         today = datetime.now().date()
 
         # 각 메뉴별로 해당 시간대에 할인율 높은 순으로 StoreItem 가져오기
-        # 여러 개 모두 반환
-        for menu_id in menu_ids:
-            menu = StoreMenu.objects.filter(pk=menu_id).first()
-            if not menu:
-                continue
-
-            # 할인율이 높은 순으로 모든 StoreItem 조회 (item_reservation_date = today, item_reservation_time = time_int)
-            store_items = StoreItem.objects.filter(
-                menu=menu,
-                space=space,
-                item_reservation_date=target_date,
-                item_reservation_time=target_time,
-            ).order_by("-max_discount_rate")
-
-            if not store_items.exists():
-                # 재고 없거나 예약 불가능한 경우라도 메뉴는 노출, 빈 상태로 is_available False 처리할 수 있음
+        for menu_space in menu_spaces:
+            menu = menu_space.menu
+            store_items = menu.store_items
+        
+            if not store_items:
                 menus_data.append(
                     {
                         "menu_id": menu.menu_id,
@@ -732,20 +732,18 @@ class StoreSpaceDetailView(APIView):
                         "menu_price": menu.menu_price,
                         "item_id": None,
                         "discount_rate": 0,
-                        "discounted_price": menu.menu_price,
+                        "discounted_price": (menu.menu_price // 100) * 100,
                         "is_available": False,
                     }
                 )
                 continue
 
-            # 메뉴별 StoreItem 여러개 모두 처리
             for item in store_items:
-                # 수정 - current_discount_rate 사용
-                discounted_price = (
-                    int(menu.menu_price * (1 - item.current_discount_rate))
-                    if item.current_discount_rate
-                    else menu.menu_price
-                )
+                discounted_price = menu.menu_price
+                if item.current_discount_rate:
+                    discounted_price = int(menu.menu_price * (1 - item.current_discount_rate))
+                    discounted_price = (discounted_price // 100) * 100
+            
                 menus_data.append(
                     {
                         "menu_id": menu.menu_id,
@@ -753,31 +751,13 @@ class StoreSpaceDetailView(APIView):
                         "menu_image_url": menu.menu_image_url,
                         "menu_price": menu.menu_price,
                         "item_id": item.item_id,
-                        "discount_rate": (
-                            int(item.current_discount_rate * 100)
-                            if item.current_discount_rate
-                            else 0
-                        ),
+                        "discount_rate": int(item.current_discount_rate * 100) if item.current_discount_rate else 0,
                         "discounted_price": discounted_price,
                         "is_available": item.item_stock > 0,
                     }
                 )
 
-        # 찜 - 사용자 인증 방식 적용
-        user = request.user
-        if not user or not user.is_authenticated:
-            return Response(
-                {"error": "인증이 필요합니다."}, status=401
-            )  # 인증 필요시 401 반환
-
-        # 찜 정보 페어 반환
-        is_liked = False
-        liked_id = 0
-        like = UserLike.objects.filter(user=user, store=store).first()
-        if like:
-            is_liked = True
-            liked_id = like.like_id
-
+        # 6. 최종 응답 반환
         response_data = {
             "store_name": store.store_name,
             "space_name": space.space_name,
@@ -790,8 +770,7 @@ class StoreSpaceDetailView(APIView):
             "menus": menus_data,
         }
 
-        return Response(response_data)
-
+        return Response(response_data, status=200)
 
 class StoreSingleSpaceDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
@@ -953,7 +932,8 @@ class StoreSingleSpaceDetailView(APIView):
             )
             if item:
                 discounted_price = (
-                    int(menu.menu_price * (1 - item.current_discount_rate))
+                    (int(menu.menu_price * (1 - item.current_discount_rate)) // 100)
+                    * 100
                     if item.current_discount_rate
                     else menu.menu_price
                 )
@@ -1187,7 +1167,7 @@ class StoreItemDetailView(APIView):
             int(item.current_discount_rate * 100) if item.current_discount_rate else 0
         )
         discounted_price = (
-            int(menu.menu_price * (1 - item.current_discount_rate))
+            (int(menu.menu_price * (1 - item.current_discount_rate)) // 100) * 100
             if item.current_discount_rate
             else menu.menu_price
         )
@@ -1246,7 +1226,7 @@ class MakeAddress(APIView):
         return Response({"message": "주소 수정 완료"})
 
 
-# 공급자 API -----------------------------------------------
+# 공급자 API
 
 
 # 공급자용 가게 등록/조회 하기
@@ -1317,123 +1297,6 @@ class OwnerStore(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
-"""    
-# 공급자용 슬롯 확인하기
-class OwnerSlot(APIView):
-    permission_classes = [IsOwnerRole]
-
-    def get(self, request):
-        user = request.user
-        if not user or not user.is_authenticated:
-            return Response({"error": "인증이 필요합니다."}, status=401)
-
-        store_id = request.data.get("store_id")
-        if not store_id:
-            return Response({"error": "store_id가 필요합니다."}, status=400)
-
-        # store_id에 해당하는 모든 space 정보 가져오기
-        try:
-            spaces = StoreSpace.objects.filter(store_id=store_id)
-        except Store.DoesNotExist:
-            return Response({"error": "해당하는 스토어를 찾을 수 없습니다."}, status=404)
-
-        today = date.today()
-        tomorrow = today + timedelta(days=1)
-        now = datetime.now().time()
-
-        today_spaces_data = []
-        tomorrow_spaces_data = []
-
-        # 슬롯 데이터를 처리하는 헬퍼 함수
-        def process_slots(slot_queryset):
-            slots_data = []
-            for slot in slot_queryset:
-                reservation_info = None
-                is_reserved = False
-
-                # 예약이 있는지 확인
-                try:
-                    reservation = Reservation.objects.get(reservation_slot=slot)
-                    is_reserved = True
-                    
-                    # 예약이 있을 경우, 예약 정보 구성
-                    # reservation.store_item이 ReservationItem 모델에 대한 OneToOne 필드라고 가정
-                    reservation_item = reservation.store_item
-                    
-                    menu_name = None
-                    if reservation_item:
-                        # 메뉴 이름 가져오기.
-                        try:
-                            # reservation_item.menu가 Menu 모델에 대한 OneToOne 필드라고 가정
-                            menu_name = reservation_item.menu.menu_name
-                        except StoreMenu.DoesNotExist:
-                            # 관련 메뉴가 없을 경우
-                            print(f"Warning: Menu not found for item_id {reservation_item.item_id}")
-                            menu_name = None # 또는 "알 수 없는 메뉴"와 같이 설정
-
-                    reservation_info = {
-                        "reservation_id": reservation.reservation_id,
-                        "item_id": reservation_item.item_id if reservation_item else None,
-                        "user_email": reservation.user.user_email,
-                        "menu_name": menu_name
-                    }
-                except Reservation.DoesNotExist:
-                    # 예약이 없으면 수동 마감 상태 확인
-                    is_reserved = slot.is_reserved
-
-                slots_data.append({
-                    "slot_id": slot.slot_id,
-                    "time": slot.slot_reservation_time.strftime("%H:%M"),
-                    "is_reserved": is_reserved,
-                    "reservation_info": reservation_info,
-                })
-            return slots_data
-
-        for space in spaces:
-            # 오늘 슬롯 (현재 시간 이후)
-            today_slots = StoreSlot.objects.filter(
-                space=space,
-                slot_reservation_date=today,
-                slot_reservation_time__gte=now
-            ).order_by('slot_reservation_time')
-            today_slots_data = process_slots(today_slots)
-            
-            today_spaces_data.append({
-                "space_id": space.space_id,
-                "space_name": space.space_name,
-                "space_image_url": space.space_image_url,
-                "slots": today_slots_data
-            })
-
-            # 내일 슬롯
-            tomorrow_slots = StoreSlot.objects.filter(
-                space=space,
-                slot_reservation_date=tomorrow
-            ).order_by('slot_reservation_time')
-            tomorrow_slots_data = process_slots(tomorrow_slots)
-
-            tomorrow_spaces_data.append({
-                "space_id": space.space_id,
-                "space_name": space.space_name,
-                "space_image_url": space.space_image_url,
-                "slots": tomorrow_slots_data
-            })
-        
-        response_data = {
-            "dates": [
-                {
-                    "date": "today",
-                    "spaces": today_spaces_data
-                },
-                {
-                    "date": "tomorrow",
-                    "spaces": tomorrow_spaces_data
-                }
-            ]
-        }
-        return Response(response_data)"""
 
 
 class OwnerStatic(APIView):
@@ -1559,11 +1422,15 @@ class OwnerStatic(APIView):
             "item_id", flat=True
         )
 
-        # 최근 day일 동안 생성된 ItemRecord 가져오기
-        record_start_date = today - timedelta(days=day)
+
+        day_three = day - 5
+        # 최근 day + 3 일 동안 생성된 ItemRecord 가져오기
+        record_start_date = today - timedelta(days=day_three)
         item_records = ItemRecord.objects.filter(
             store_item_id__in=store_item_ids,
             created_at__gte=record_start_date,  # BaseModel 상속받았으니 created_at 존재한다고 가정
+            record_stock = 0,
+            sold = 1,
         ).values("time_offset_idx", "record_discount_rate", "created_at")
 
         time_dix_discount_rate = [
@@ -1609,17 +1476,66 @@ class OwnerStatic(APIView):
 
         return Response(response_data)
 
-        # -----------------------------------------------------------
-        # reservation 개수 가져와서 -> total_reservations_count 에 넣기
+# StoreCoordinate 좌표 채우기 (전체)
+class MakeAllCoordinates(APIView):
+    permission_classes = [IsAdminRole]
 
-        # 그리고 리스트당 각 reservation 계산하기
+    def post(self, request):
+        try:
+            stores = Store.objects.all()  # 모든 store 다 가져오기
+            for store in stores:
+                # 이미 좌표 데이터가 존재하는 지 확인
+                if not StoreCoordinate.objects.filter(store_id=store.store_id).exists():
+                    address = getattr(store, "store_address", None)
+                    if address:
+                        x, y = get_coordinates(address)
+                        if x and y:
+                            StoreCoordinate.objects.create(
+                                store_id=store.store_id,
+                                store_x=float(x),
+                                store_y=float(y),
+                            )
+                        else:
+                            # 좌표 변환 실패 시
+                            print(f"좌표 변환 실패:{store.store_name}({address})")
+            return Response(
+                {"message": "모든 가게의 좌표 데이터 생성을 완료했습니다."},
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-        ## 일단 reservation_cost 가져와서 total_discount_amount 에 넣기
-        ## item 참고해서, 정가를 total_price 에 넣기
-        ## item 참고해서, menu 알아내고, 그 menu 리스트에 해당하면 +1 하기
-        ## 그리고 reservation의 slot 참고해서, 해당 시간(0~23) 리스트에 +1 더하기
 
-        # 그렇게 다 하면, total_price(정가) - total_discount_amount(할인한 가격) 를 빼서, 최종 판매 가격인 total_revenue의 value 에 넣기.
+# StoreCoordiante 좌표 채우기 (단일) -> 이후 가게 추가하는 상황 고려
+class MakeOneCoordinate(APIView):
+    permission_classes = [IsAdminRole]
 
-        # 그러면 이제 과거 리스트에서 얻어낸 total_revenue의 value와 현재 리스트의 것 비교해서 상승룰(delta) 구하기
-        # total_reservation_count 도 그렇게 하기
+    def post(self, request, store_id):
+        try:
+            store = get_object_or_404(
+                Store, store_id=store_id
+            )  # 모든 store 다 가져오기
+            # 이미 좌표 데이터가 존재하는 지 확인
+            if not StoreCoordinate.objects.filter(store_id=store.store_id).exists():
+                address = getattr(store, "store_address", None)
+                if address:
+                    x, y = get_coordinates(address)
+                    if x and y:
+                        StoreCoordinate.objects.create(
+                            store_id=store.store_id, store_x=float(x), store_y=float(y)
+                        )
+                    else:
+                        # 좌표 변환 실패 시
+                        print(f"좌표 변환 실패:{store.store_name}({address})")
+            return Response(
+                {
+                    "message": f"store_id : {store.store_id} 인 가게의 좌표 데이터 생성을 완료했습니다."
+                },
+                status=201,
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

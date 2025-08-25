@@ -8,7 +8,12 @@ from drf_yasg import openapi
 from rest_framework.generics import get_object_or_404
 
 from .models import User
-from .serializers import GoogleLoginSerializer, AdminLoginSerializer, UserSerializer, OwnerLoginSerializer
+from .serializers import (
+    GoogleLoginSerializer,
+    AdminLoginSerializer,
+    UserSerializer,
+    OwnerLoginSerializer,
+)
 from config.authentication import FirebaseIDTokenAuthentication
 from .permissions import *
 
@@ -22,6 +27,7 @@ from logger import get_logger
 
 logger = get_logger("buynow.accounts")
 
+
 def view_func(request):
     logger.info("배포 서버에서 호출됨")
     try:
@@ -29,9 +35,9 @@ def view_func(request):
     except Exception as e:
         logger.error(f"에러 발생: {e}")
 
-# ----------------------------
+
 # 로그인 & 토큰 관련 view
-# ----------------------------
+
 
 # Google 로그인
 class GoogleLoginAPIView(APIView):
@@ -54,11 +60,11 @@ class GoogleLoginAPIView(APIView):
                         "user_role": openapi.Schema(type=openapi.TYPE_STRING),
                         "access_token": openapi.Schema(type=openapi.TYPE_STRING),
                         "refresh_token": openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
+                    },
+                ),
             ),
-            400: "유효하지 않은 요청"
-        }
+            400: "유효하지 않은 요청",
+        },
     )
     def post(self, request):
         serializer = GoogleLoginSerializer(data=request.data)
@@ -69,14 +75,18 @@ class GoogleLoginAPIView(APIView):
         created = result["created"]
         message = "회원가입 성공" if created else "로그인 성공"
 
-        return Response({
-            "message": message,
-            "user_email": user.user_email,
-            "user_image_url": user.user_image_url,
-            "user_role": user.user_role,
-            "access_token": result["access_token"],
-            "refresh_token": result["refresh_token"]
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "message": message,
+                "user_email": user.user_email,
+                "user_image_url": user.user_image_url,
+                "user_role": user.user_role,
+                "access_token": result["access_token"],
+                "refresh_token": result["refresh_token"],
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 # Admin 로그인
 class AdminLoginAPIView(APIView):
@@ -97,12 +107,12 @@ class AdminLoginAPIView(APIView):
                         "user_role": openapi.Schema(type=openapi.TYPE_STRING),
                         "access_token": openapi.Schema(type=openapi.TYPE_STRING),
                         "refresh_token": openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
+                    },
+                ),
             ),
             400: "유효하지 않은 요청",
-            403: "관리자 권한 없음"
-        }
+            403: "관리자 권한 없음",
+        },
     )
     def post(self, request):
         serializer = AdminLoginSerializer(data=request.data)
@@ -113,12 +123,15 @@ class AdminLoginAPIView(APIView):
         created = result["created"]
         message = "회원가입 성공" if created else "로그인 성공"
 
-        return Response({
-            "message": message,
-            "user_role": user.user_role,
-            "access_token": result["access_token"],
-            "refresh_token": result["refresh_token"]
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "message": message,
+                "user_role": user.user_role,
+                "access_token": result["access_token"],
+                "refresh_token": result["refresh_token"],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # 공급자 로그인 기능
@@ -137,35 +150,38 @@ class OwnerLoginAPIView(APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         "message": openapi.Schema(type=openapi.TYPE_STRING),
-                        "user_email" : openapi.Schema(type=openapi.TYPE_STRING),
+                        "user_email": openapi.Schema(type=openapi.TYPE_STRING),
                         "user_role": openapi.Schema(type=openapi.TYPE_STRING),
                         "access_token": openapi.Schema(type=openapi.TYPE_STRING),
                         "refresh_token": openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
+                    },
+                ),
             ),
             400: "유효하지 않은 요청",
-        }
+        },
     )
     def post(self, request):
         serializer = OwnerLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = serializer.validated_data
 
-        #user = result["user"]
+        # user = result["user"]
         user_id = result["user_id"]
         user_email = result["user_email"]
         user_role = result["user_role"]
         message = "공급자 로그인 성공"
 
-        return Response({
-            "message": message,
-            "user_id" : user_id,
-            "user_email" : user_email,
-            "user_role": user_role,
-            "access_token": result["access_token"],
-            "refresh_token": result["refresh_token"]
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "message": message,
+                "user_id": user_id,
+                "user_email": user_email,
+                "user_role": user_role,
+                "access_token": result["access_token"],
+                "refresh_token": result["refresh_token"],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # refresh로 access 토큰 재발급
@@ -175,26 +191,31 @@ class TokenRefreshAPIView(APIView):
     def post(self, request):
         refresh_token = request.data.get("refresh_token")
         if not refresh_token:
-            return Response({"error": "refresh_token is required"}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response(
+                {"error": "refresh_token is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             refresh = RefreshToken(refresh_token)
-            user_id = refresh['user_id']  # 토큰 payload에서 id 가져오기
+            user_id = refresh["user_id"]  # 토큰 payload에서 id 가져오기
             user = User.objects.get(id=user_id)
 
-            if user.user_role not in ['admin', 'customer', 'owner']:
-                return Response({"error": "권한 없음"}, status=status.HTTP_403_FORBIDDEN)
-
+            if user.user_role not in ["admin", "customer", "owner"]:
+                return Response(
+                    {"error": "권한 없음"}, status=status.HTTP_403_FORBIDDEN
+                )
 
             access_token = str(refresh.access_token)
             return Response({"access_token": access_token}, status=status.HTTP_200_OK)
         except TokenError as e:
-            return Response({"error": "Invalid or expired refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
-        
+            return Response(
+                {"error": "Invalid or expired refresh token"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
-# ----------------------------
+
 # User API
-# ----------------------------
 class UserList(APIView):
     authentication_classes = [JWTAuthentication]  # JWT 토큰 인증
     permission_classes = [IsAdminRole]  # 관리자만 접근 가능
@@ -202,61 +223,85 @@ class UserList(APIView):
     @swagger_auto_schema(
         operation_summary="User 목록 조회",
         operation_description="모든 사용자 조회 (관리자 전용)",
-        responses={200: UserSerializer(many=True)}
+        responses={200: UserSerializer(many=True)},
     )
     def get(self, request):
         users = User.objects.all()
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
-    
+
+
 class UserDetail(APIView):
     permission_classes = [IsAdminRole]
+
     @swagger_auto_schema(
-        operation_summary = "User 단일 조회",
-        operation_description = "해당 id의 User을 조회합니다.",
-        responses={200: UserSerializer, 400: "user_id Path 파라미터가 필요합니다.", 404: "존재하지 않는 User"}
+        operation_summary="User 단일 조회",
+        operation_description="해당 id의 User을 조회합니다.",
+        responses={
+            200: UserSerializer,
+            400: "user_id Path 파라미터가 필요합니다.",
+            404: "존재하지 않는 User",
+        },
     )
     def get(self, request, user_id):
-        user = get_object_or_404(User, id = user_id)
+        user = get_object_or_404(User, id=user_id)
         serializer = UserSerializer(user)
         return Response(serializer.data)
-    
+
     @swagger_auto_schema(
-        operation_summary = "User 단일 삭제",
-        operation_description = "해당 id의 User을 삭제합니다.",
-        responses={204: "삭제 완료" , 400: "user_id 가 필요합니다.", 404: "존재하지 않는 User"}
+        operation_summary="User 단일 삭제",
+        operation_description="해당 id의 User을 삭제합니다.",
+        responses={
+            204: "삭제 완료",
+            400: "user_id 가 필요합니다.",
+            404: "존재하지 않는 User",
+        },
     )
-    def delete(self, request,user_id):
-        user = get_object_or_404(User, id = user_id)
+    def delete(self, request, user_id):
+        user = get_object_or_404(User, id=user_id)
         user.delete()
-        return Response(status = status.HTTP_204_NO_CONTENT)
-    
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class UserMe(APIView):
     permission_classes = [IsUserRole]
+
     @swagger_auto_schema(
-        operation_summary = "User 본인 조회",
-        operation_description = "User 본인의 정보를 조회합니다.",
-        responses={200: UserSerializer, 401: "인증이 필요합니다."}
+        operation_summary="User 본인 조회",
+        operation_description="User 본인의 정보를 조회합니다.",
+        responses={200: UserSerializer, 401: "인증이 필요합니다."},
     )
     def get(self, request):
         user = request.user  # JWT 인증으로 이미 로그인한 사용자 객체가 들어있음
         if not user or not user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-    
+
         serializer = UserSerializer(user)
-        return Response(serializer.data)
-    
+        data = serializer.data
+        # 일의 자리, 십의 자리 0으로 변환 처리
+        original_value = data.get("user_discounted_cost_sum")
+        if original_value is not None:
+            rounded_value = (int(original_value) // 100) * 100
+            data["user_discounted_cost_sum"] = rounded_value
+        return Response(data)
+
     @swagger_auto_schema(
         operation_summary="User 주소 업데이트",
         operation_description="User 본인의 도로명 주소(user_address)를 업데이트합니다.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'user_address': openapi.Schema(type=openapi.TYPE_STRING, description='도로명 주소'),
+                "user_address": openapi.Schema(
+                    type=openapi.TYPE_STRING, description="도로명 주소"
+                ),
             },
-            required=['user_address'],
+            required=["user_address"],
         ),
-        responses={200: UserSerializer, 400: "주소가 필요합니다.", 401: "인증이 필요합니다."}
+        responses={
+            200: UserSerializer,
+            400: "주소가 필요합니다.",
+            401: "인증이 필요합니다.",
+        },
     )
     def patch(self, request):
         user = request.user
@@ -273,5 +318,3 @@ class UserMe(APIView):
 
         serializer = UserSerializer(user)
         return Response(serializer.data)
-    
-

@@ -1,5 +1,3 @@
-# from pricing.models import MenuPricingParam
-# from pricing.models import MenuPricingParam
 from django.apps import apps
 from stores.models import StoreItem
 from records.models import ItemRecord
@@ -10,20 +8,12 @@ from datetime import datetime, time
 MenuPricingParam = apps.get_model("pricing", "MenuPricingParam")
 
 
-
 def sigmoid(x):
     if x < -30:
         return 0.0
     if x > 30:
         return 1.0
     return 1.0 / (1.0 + math.exp(-x))
-
-
-def gamma_to_gamma_tilde(gamma):
-    val = math.exp(-gamma) - 1
-    if val <= 0:
-        val = 1e-8
-    return math.log(val)
 
 
 def create_item_record(store_item, sold=1, is_dummy_flag=False):

@@ -92,6 +92,4 @@ class Command(BaseCommand):
                 )
             )
 
-        self.stdout.write(
-            self.style.SUCCESS("✅ StoreItem 및 StoreSlot 배치 생성 완료")
-        )
+        self.stdout.write(self.style.SUCCESS("StoreItem 및 StoreSlot 배치 생성 완료"))
