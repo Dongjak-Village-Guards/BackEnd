@@ -443,9 +443,7 @@ class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고�
         user = request.user
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
-        User = get_user_model()
-        fresh_user = User.objects.get(pk=user.id)  # DB에서 항상 최신 데이터
-        user_address = fresh_user.user_address
+        user_address = user.user_address
 
         # 필수 쿼리 파라미터 확인
         try:
