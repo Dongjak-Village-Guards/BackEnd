@@ -214,7 +214,7 @@ REST_FRAMEWORK = {
 REST_USE_JWT = True
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),  # 유효기간 1시간
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=1),  # 유효기간 1분
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
