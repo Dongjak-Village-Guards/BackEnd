@@ -52,8 +52,6 @@ ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
-# Application definition
-
 DJANGO_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -115,10 +113,6 @@ DB_DEV_PW = get_secret("DB_DEV_PW")  # 개발용 DB 비밀번호
 DB_DEP_PW = get_secret("DB_DEP_PW")  # 배포용 DB 비밀번호
 
 DATABASES = {
-    #'local': {
-    #    'ENGINE': 'django.db.backends.sqlite3',
-    #    'NAME': BASE_DIR / 'db.sqlite3',
-    # },
     "development": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": "buynow_dev",  # 개발용 DB 이름
@@ -183,10 +177,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
     "https://dongjak.netlify.app",
     "https://designcheck.netlify.app",
+    "https://nowsale.streamlit.app",
 ]
 pymysql.install_as_MySQLdb()
 
@@ -209,22 +202,16 @@ AWS_S3_OBJECT_PARAMETERS = {
 ###REST_FRAMEWORK###
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        #'config.authentication.FirebaseIDTokenAuthentication',
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",  # 필요시
     ],
-    # 'DEFAULT_PERMISSION_CLASSES': [
-    #     'rest_framework.permissions.IsAuthenticated',
-    # ],
 }
 
 REST_USE_JWT = True
 
-SIMPLE_JWT = {  # TODO 배포전 설정 검토 - 유효기간 등
-    "ACCESS_TOKEN_LIFETIME": timedelta(
-        hours=120
-    ),  # 유효기간 120시간 (개발중이라 길게함. 나중에 꼭 줄여놔야해!!)
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),  # 유효기간 1시간
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
