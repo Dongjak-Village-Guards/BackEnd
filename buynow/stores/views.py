@@ -1431,7 +1431,7 @@ class OwnerStatic(APIView):
         )
 
 
-        day_three = day - 3
+        day_three = day - 5
         # 최근 day + 3 일 동안 생성된 ItemRecord 가져오기
         record_start_date = today - timedelta(days=day_three)
         item_records = ItemRecord.objects.filter(
