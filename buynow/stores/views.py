@@ -713,7 +713,7 @@ class StoreSpaceDetailView(APIView):
             liked_id = like.like_id
         except UserLike.DoesNotExist:
             is_liked = False
-        liked_id = None
+            liked_id = None
 
         menus_data = []
         today = datetime.now().date()
