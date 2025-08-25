@@ -10,7 +10,7 @@ from accounts.permissions import IsUserRole, IsAdminRole, IsOwnerRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField, Window
+from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField, Window, Prefetch
 from django.db.models.functions import RowNumber
 from datetime import datetime, timedelta, date
 import math
@@ -680,11 +680,24 @@ class StoreSpaceDetailView(APIView):
             target_time = time_int - 24
         selected_time_formatted = f"{target_time}:00"
 
-        # StoreMenuSpace에서 해당 space_id에 연결된 menu들
-        menu_spaces = StoreMenuSpace.objects.filter(space=space)
-        menu_ids = menu_spaces.values_list("menu_id", flat=True).distinct()
+        # StoreMenuSpace, StoreMenu, StoreItem 정보를 한 번의 쿼리로 미리 가져옴
+        menu_spaces = (
+            StoreMenuSpace.objects.filter(space=space)
+            .select_related("menu")
+            .prefetch_related(
+                Prefetch(
+                    "menu__storeitem_set",
+                    queryset=StoreItem.objects.filter(
+                        space=space,
+                        item_reservation_date=target_date,
+                        item_reservation_time=target_time,
+                    ).order_by("-current_discount_rate"),
+                    to_attr="store_items",
+                )
+            )
+        )
 
-        if not menu_ids:
+        if not menu_spaces.exists():
             return Response(
                 {
                     "errorCode": "NO_MENU_AVAILABLE",
@@ -693,26 +706,24 @@ class StoreSpaceDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # 현재 유저가 이 스토어를 찜했는지 확인
+        try:
+            like = UserLike.objects.get(user=user, store=store)
+            is_liked = True
+            liked_id = like.like_id
+        except UserLike.DoesNotExist:
+            is_liked = False
+        liked_id = None
+
         menus_data = []
         today = datetime.now().date()
 
         # 각 메뉴별로 해당 시간대에 할인율 높은 순으로 StoreItem 가져오기
-        # 여러 개 모두 반환
-        for menu_id in menu_ids:
-            menu = StoreMenu.objects.filter(pk=menu_id).first()
-            if not menu:
-                continue
-
-            # 할인율이 높은 순으로 모든 StoreItem 조회 (item_reservation_date = today, item_reservation_time = time_int)
-            store_items = StoreItem.objects.filter(
-                menu=menu,
-                space=space,
-                item_reservation_date=target_date,
-                item_reservation_time=target_time,
-            ).order_by("-max_discount_rate")
-
-            if not store_items.exists():
-                # 재고 없거나 예약 불가능한 경우라도 메뉴는 노출, 빈 상태로 is_available False 처리할 수 있음
+        for menu_space in menu_spaces:
+            menu = menu_space.menu
+            store_items = menu.store_items
+        
+            if not store_items:
                 menus_data.append(
                     {
                         "menu_id": menu.menu_id,
@@ -721,25 +732,18 @@ class StoreSpaceDetailView(APIView):
                         "menu_price": menu.menu_price,
                         "item_id": None,
                         "discount_rate": 0,
-                        "discounted_price": (menu.menu_price // 100)
-                        * 100,  # 100단위 절사
+                        "discounted_price": (menu.menu_price // 100) * 100,
                         "is_available": False,
                     }
                 )
                 continue
 
-            # 메뉴별 StoreItem 여러개 모두 처리
             for item in store_items:
-                # 수정 - current_discount_rate 사용
+                discounted_price = menu.menu_price
                 if item.current_discount_rate:
-                    discounted_price = int(
-                        menu.menu_price * (1 - item.current_discount_rate)
-                    )
-                    discounted_price = (
-                        discounted_price // 100
-                    ) * 100  # 100원 단위 내림 처리
-                else:
-                    discounted_price = menu.menu_price
+                    discounted_price = int(menu.menu_price * (1 - item.current_discount_rate))
+                    discounted_price = (discounted_price // 100) * 100
+            
                 menus_data.append(
                     {
                         "menu_id": menu.menu_id,
@@ -747,31 +751,13 @@ class StoreSpaceDetailView(APIView):
                         "menu_image_url": menu.menu_image_url,
                         "menu_price": menu.menu_price,
                         "item_id": item.item_id,
-                        "discount_rate": (
-                            int(item.current_discount_rate * 100)
-                            if item.current_discount_rate
-                            else 0
-                        ),
+                        "discount_rate": int(item.current_discount_rate * 100) if item.current_discount_rate else 0,
                         "discounted_price": discounted_price,
                         "is_available": item.item_stock > 0,
                     }
                 )
 
-        # 찜 - 사용자 인증 방식 적용
-        user = request.user
-        if not user or not user.is_authenticated:
-            return Response(
-                {"error": "인증이 필요합니다."}, status=401
-            )  # 인증 필요시 401 반환
-
-        # 찜 정보 페어 반환
-        is_liked = False
-        liked_id = 0
-        like = UserLike.objects.filter(user=user, store=store).first()
-        if like:
-            is_liked = True
-            liked_id = like.like_id
-
+        # 6. 최종 응답 반환
         response_data = {
             "store_name": store.store_name,
             "space_name": space.space_name,
@@ -784,8 +770,7 @@ class StoreSpaceDetailView(APIView):
             "menus": menus_data,
         }
 
-        return Response(response_data)
-
+        return Response(response_data, status=200)
 
 class StoreSingleSpaceDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
