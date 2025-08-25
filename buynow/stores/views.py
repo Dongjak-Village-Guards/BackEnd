@@ -10,7 +10,7 @@ from accounts.permissions import IsUserRole, IsAdminRole, IsOwnerRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField, Window
+from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField, Window, Case, When, Value, BooleanField
 from django.db.models.functions import RowNumber
 from datetime import datetime, timedelta, date
 import math
@@ -477,6 +477,42 @@ class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고�
             distance = 0
             on_foot = 0
 
+        # 모든 StoreSpace 및 관련 StoreItem, StoreSlot 데이터를 한 번에 가져오기
+        spaces_with_items = StoreSpace.objects.filter(store=store).annotate(
+            # 해당 날짜/시간의 아이템 재고를 기준으로 최대 할인율 계산
+            max_discount_available=Max(
+                "storeitem__current_discount_rate",
+                filter=Q(
+                    storeitem__item_reservation_date=target_date,
+                    storeitem__item_reservation_time=target_time,
+                    storeitem__item_stock__gt=0
+                )
+            ),
+            # 재고가 없는 경우의 최대 할인율 계산
+            max_discount_unavailable=Max(
+                "storeitem__current_discount_rate",
+                filter=Q(
+                    storeitem__item_reservation_date=target_date,
+                    storeitem__item_reservation_time=target_time,
+                    storeitem__item_stock=0
+                )
+            ),
+            # 예약 가능 여부 판정 (재고가 1 이상인 아이템이 있는지 + 슬롯이 예약되었는지)
+            has_available_items=Case(
+                When(
+                    storeitem__item_reservation_date=target_date,
+                    storeitem__item_reservation_time=target_time,
+                    storeitem__item_stock__gt=0,
+                    then=Value(True)
+                ),
+                default=Value(False),
+                output_field=BooleanField()
+            )
+        ).prefetch_related(
+        "storeslot_set" # StoreSlot 데이터를 미리 가져옴
+        )
+
+        # 6. 응답 데이터 생성
         store_data = {
             "store_name": store.store_name,
             "store_category": store.store_category,
@@ -488,62 +524,18 @@ class StoreSpacesDetailView(APIView):  # TODO 할인율 가능한거에서 고�
             "spaces": [],
         }
 
-        # Space 목록 생성
-        spaces = StoreSpace.objects.filter(store=store)
-
-        for space in spaces:
-            # 1) 재고가 1 이상인 아이템 중 최대 할인율 구하기
-            max_discount = StoreItem.objects.filter(
-                store=store,
-                space=space,
-                item_reservation_date=target_date,
-                item_reservation_time=target_time,
-                item_stock__gt=0,  # 재고 1 이상
-            ).aggregate(Max("current_discount_rate"))["current_discount_rate__max"]
-
-            # 2) 만약 재고 1 이상인 아이템이 없으면, 재고 0인 아이템 중 최대 할인율 구하기
-            if max_discount is None:
-                max_discount = StoreItem.objects.filter(
-                    store=store,
-                    space=space,
-                    item_reservation_date=target_date,
-                    item_reservation_time=target_time,
-                    item_stock=0,  # 재고 0
-                ).aggregate(Max("current_discount_rate"))["current_discount_rate__max"]
-
+        for space in spaces_with_items:
+            max_discount = space.max_discount_available or space.max_discount_unavailable
             max_discount_percent = int(max_discount * 100) if max_discount else 0
 
-            # 예약 가능 여부 판정
-            # 재고가 0인 아이템이 하나라도 있는지 체크
-            has_zero_stock = StoreItem.objects.filter(
-                store=store,
-                space=space,
-                item_reservation_date=target_date,
-                item_reservation_time=target_time,
-                item_stock=0,
+            # 슬롯 예약 여부 확인 (미리 가져온 데이터 사용)
+            is_reserved = space.storeslot_set.filter(
+                slot_reservation_date=target_date,
+                slot_reservation_time=target_time,
+                is_reserved=True
             ).exists()
 
-            if has_zero_stock:
-                is_possible = False
-            else:
-                # 재고 1 이상인 아이템 존재 여부
-                is_possible = StoreItem.objects.filter(
-                    store=store,
-                    space=space,
-                    item_reservation_date=target_date,
-                    item_reservation_time=target_time,
-                    item_stock__gt=0,
-                ).exists()
-
-            if is_possible == True:
-                slot = get_object_or_404(
-                    StoreSlot,
-                    space=space,
-                    slot_reservation_date=target_date,
-                    slot_reservation_time=target_time,
-                )
-                if slot.is_reserved == True:
-                    is_possible = False
+            is_possible = space.has_available_items and not is_reserved
 
             store_data["spaces"].append(
                 {
