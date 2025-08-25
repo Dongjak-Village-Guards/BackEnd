@@ -10,7 +10,16 @@ from accounts.permissions import IsUserRole, IsAdminRole, IsOwnerRole
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.db.models import Q, Max, Count, F, ExpressionWrapper, FloatField, Window, Prefetch
+from django.db.models import (
+    Q,
+    Max,
+    Count,
+    F,
+    ExpressionWrapper,
+    FloatField,
+    Window,
+    Prefetch,
+)
 from django.db.models.functions import RowNumber
 from datetime import datetime, timedelta, date
 import math
@@ -254,6 +263,16 @@ class StoreListView(APIView):
             is_liked = store_id in liked_stores_dict
             liked_id = liked_stores_dict.get(store_id, 0)
 
+            discounted_price = (
+                int(
+                    (item.menu.menu_price * (1 - item.current_discount_rate))
+                    // 100
+                    * 100
+                )
+                if item.current_discount_rate and item.current_discount_rate >= 0.01
+                else item.menu.menu_price
+            )
+
             results.append(
                 {
                     "store_id": store_id,
@@ -268,11 +287,7 @@ class StoreListView(APIView):
                     ),  # max -> current
                     "max_discount_menu": item.menu.menu_name,
                     "max_discount_price_origin": item.menu.menu_price,
-                    "max_discount_price": int(
-                        (item.menu.menu_price * (1 - item.current_discount_rate))
-                        // 100
-                        * 100  # 100 단위 절사
-                    ),
+                    "max_discount_price": discounted_price,
                     "is_liked": is_liked,
                     "liked_id": liked_id,
                 }
@@ -432,7 +447,7 @@ class StoreSpacesDetailView(APIView):
         if not request.user or not request.user.is_authenticated:
             return Response({"error": "인증이 필요합니다."}, status=401)
         user_x, user_y = get_coordinates(user.user_address)
-        user_address = [user_x,user_y]
+        user_address = [user_x, user_y]
 
         # 필수 쿼리 파라미터 확인
         try:
@@ -465,7 +480,7 @@ class StoreSpacesDetailView(APIView):
             target_date = today + timedelta(days=1)
             target_time = time_filter - 24
 
-        store_coor = get_object_or_404(StoreCoordinate, store_id = store_id)
+        store_coor = get_object_or_404(StoreCoordinate, store_id=store_id)
         store_address = [store_coor.store_x, store_coor.store_y]
 
         if user_address and store_address:
@@ -722,7 +737,7 @@ class StoreSpaceDetailView(APIView):
         for menu_space in menu_spaces:
             menu = menu_space.menu
             store_items = menu.store_items
-        
+
             if not store_items:
                 menus_data.append(
                     {
@@ -739,11 +754,14 @@ class StoreSpaceDetailView(APIView):
                 continue
 
             for item in store_items:
-                discounted_price = menu.menu_price
-                if item.current_discount_rate:
-                    discounted_price = int(menu.menu_price * (1 - item.current_discount_rate))
+                if item.current_discount_rate and item.current_discount_rate >= 0.01:
+                    discounted_price = int(
+                        menu.menu_price * (1 - item.current_discount_rate)
+                    )
                     discounted_price = (discounted_price // 100) * 100
-            
+                else:
+                    discounted_price = menu.menu_price
+
                 menus_data.append(
                     {
                         "menu_id": menu.menu_id,
@@ -751,7 +769,11 @@ class StoreSpaceDetailView(APIView):
                         "menu_image_url": menu.menu_image_url,
                         "menu_price": menu.menu_price,
                         "item_id": item.item_id,
-                        "discount_rate": int(item.current_discount_rate * 100) if item.current_discount_rate else 0,
+                        "discount_rate": (
+                            int(item.current_discount_rate * 100)
+                            if item.current_discount_rate
+                            else 0
+                        ),
                         "discounted_price": discounted_price,
                         "is_available": item.item_stock > 0,
                     }
@@ -771,6 +793,7 @@ class StoreSpaceDetailView(APIView):
         }
 
         return Response(response_data, status=200)
+
 
 class StoreSingleSpaceDetailView(APIView):
     permission_classes = [IsUserRole]  # 인증 필요, admin/customer만 접근 가능
@@ -931,12 +954,13 @@ class StoreSingleSpaceDetailView(APIView):
                 .first()
             )
             if item:
-                discounted_price = (
-                    (int(menu.menu_price * (1 - item.current_discount_rate)) // 100)
-                    * 100
-                    if item.current_discount_rate
-                    else menu.menu_price
-                )
+                if item.current_discount_rate and item.current_discount_rate >= 0.01:
+                    discounted_price = (
+                        int(menu.menu_price * (1 - item.current_discount_rate)) // 100
+                    ) * 100
+                else:
+                    discounted_price = menu.menu_price
+
                 menus_data.append(
                     {
                         "menu_id": menu.menu_id,
@@ -1166,11 +1190,12 @@ class StoreItemDetailView(APIView):
         discount_rate_percent = (
             int(item.current_discount_rate * 100) if item.current_discount_rate else 0
         )
-        discounted_price = (
-            (int(menu.menu_price * (1 - item.current_discount_rate)) // 100) * 100
-            if item.current_discount_rate
-            else menu.menu_price
-        )
+        if item.current_discount_rate and item.current_discount_rate >= 0.01:
+            discounted_price = (
+                int(menu.menu_price * (1 - item.current_discount_rate)) // 100
+            ) * 100
+        else:
+            discounted_price = menu.menu_price
 
         data = {
             "store_name": store.store_name,
@@ -1422,15 +1447,14 @@ class OwnerStatic(APIView):
             "item_id", flat=True
         )
 
-
         day_three = day - 5
         # 최근 day + 3 일 동안 생성된 ItemRecord 가져오기
         record_start_date = today - timedelta(days=day_three)
         item_records = ItemRecord.objects.filter(
             store_item_id__in=store_item_ids,
             created_at__gte=record_start_date,  # BaseModel 상속받았으니 created_at 존재한다고 가정
-            record_stock = 0,
-            sold = 1,
+            record_stock=0,
+            sold=1,
         ).values("time_offset_idx", "record_discount_rate", "created_at")
 
         time_dix_discount_rate = [
@@ -1475,6 +1499,7 @@ class OwnerStatic(APIView):
         }
 
         return Response(response_data)
+
 
 # StoreCoordinate 좌표 채우기 (전체)
 class MakeAllCoordinates(APIView):
