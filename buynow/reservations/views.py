@@ -488,6 +488,20 @@ class LikeDetail(APIView):
                 store.store_address, user.user_address
             )
 
+            discounted_price = (
+                int(
+                    (
+                        max_discount_item.menu.menu_price
+                        * (1 - max_discount_item.current_discount_rate)
+                    )
+                    // 100
+                    * 100
+                )
+                if max_discount_item.current_discount_rate
+                and max_discount_item.current_discount_rate > 0
+                else max_discount_item.menu.menu_price
+            )
+
             result.append(
                 {
                     "like_id": like.like_id,
@@ -515,18 +529,7 @@ class LikeDetail(APIView):
                     "max_discount_price_origin": (
                         max_discount_item.menu.menu_price if max_discount_item else None
                     ),
-                    "max_discount_price": (
-                        int(
-                            (
-                                max_discount_item.menu.menu_price
-                                * (1 - max_discount_item.current_discount_rate)
-                            )
-                            // 100
-                        )
-                        * 100
-                        if max_discount_item
-                        else None
-                    ),
+                    "max_discount_price": discounted_price,
                     "is_liked": True,
                     "is_available": is_available,
                 }
