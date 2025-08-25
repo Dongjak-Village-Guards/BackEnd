@@ -1548,8 +1548,8 @@ class OwnerStatic(APIView):
             "item_id", flat=True
         )
 
-        # 최근 day일 동안 생성된 ItemRecord 가져오기
-        record_start_date = today - timedelta(days=day)
+        # 최근 day + 3 일 동안 생성된 ItemRecord 가져오기
+        record_start_date = today - timedelta(days=day) + 3
         item_records = ItemRecord.objects.filter(
             store_item_id__in=store_item_ids,
             created_at__gte=record_start_date,  # BaseModel 상속받았으니 created_at 존재한다고 가정
