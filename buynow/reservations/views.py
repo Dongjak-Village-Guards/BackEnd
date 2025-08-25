@@ -45,12 +45,7 @@ def view_func(request):
         logger.error(f"에러 발생: {e}")
 
 
-# Create your views here.
-
-
-# ----------------------------
 # Reservation API
-# ----------------------------
 class ReserveList(APIView):
     permission_classes = [IsUserRole]
 
@@ -146,15 +141,6 @@ class ReserveList(APIView):
                         {"error": "동일 시간대에 이미 예약을 한 상태입니다"},
                         status=400,
                     )
-                # 위는 쿼리 (성능 우수) 밑은 파이썬으로.
-                """user_reservations = Reservation.objects.filter(user=user)
-                if user_reservations is None:
-                    pass
-                else:
-                    for user_reservation in user_reservations:
-                        reservation_slot = user_reservation.reservation_slot
-                        if reservation_slot.slot_reservation_date == item.item_reservation_date and reservation_slot.slot_reservation_time == item.item_reservation_time:
-                            return Response({"error" : "동일 시간대에 이미 예약을 한 상태입니다"}, status=400)"""
 
                 # 재고 차감
                 item.item_stock -= 1
@@ -247,8 +233,6 @@ class ReserveDetail(APIView):
 
         # 예약 시간이 reservation.reservation_slot_id의 예약 날짜+시간
         slot = reservation.reservation_slot
-        # if not slot or not slot.slot_reservation_date or not slot.slot_reservation_time:
-        #    return Response({"error": "예약 시간이 올바르지 않습니다."}, status=400)
         if not slot:
             return Response({"error": "slot이 존재하지않습니다."}, status=400)
         if not slot.slot_reservation_date:
@@ -344,9 +328,7 @@ class ReserveMe(APIView):
         return Response(serializer.data)
 
 
-# ----------------------------
 # UserLike API
-# ----------------------------
 class LikeDetail(APIView):
     permission_classes = [IsUserRole]
 
@@ -428,12 +410,6 @@ class LikeDetail(APIView):
         time_param = request.query_params.get("time")
         category_filter = request.query_params.get("store_category")
 
-        # 기본 시간: 현재 시간의 정각
-        # if not time_filter:
-        #    time_filter = datetime.now().hour
-        # else:
-        #    time_filter = int(time_filter)
-
         # time_filter 값에 따라 날짜와 시간을 동적으로 설정
         try:
             if time_param is not None:
@@ -486,7 +462,6 @@ class LikeDetail(APIView):
             ).select_related("menu")
 
             # 모든 space의 slot중 time_filter에 해당하는 거 찾고, 그 slot의 is_reserved가 다 true면 is_available은 false
-            # today = date.today()
             is_available = False
 
             spaces = StoreSpace.objects.filter(store=store)
@@ -597,9 +572,7 @@ class LikeDetail(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# 공급자 관련 api ------------------------------------
-
-
+# 공급자 관련 api
 # 공급자용 예약 조회, 예약 취소
 class OwnerReservation(APIView):
     permission_classes = [IsOwnerRole]

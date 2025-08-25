@@ -36,9 +36,7 @@ def view_func(request):
         logger.error(f"에러 발생: {e}")
 
 
-# ----------------------------
 # 로그인 & 토큰 관련 view
-# ----------------------------
 
 
 # Google 로그인
@@ -217,9 +215,7 @@ class TokenRefreshAPIView(APIView):
             )
 
 
-# ----------------------------
 # User API
-# ----------------------------
 class UserList(APIView):
     authentication_classes = [JWTAuthentication]  # JWT 토큰 인증
     permission_classes = [IsAdminRole]  # 관리자만 접근 가능

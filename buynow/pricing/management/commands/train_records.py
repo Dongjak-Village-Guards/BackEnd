@@ -117,10 +117,6 @@ class Command(BaseCommand):
                     f"[메뉴: {menu.menu_name}] dp_weight 업데이트: {new_w:.6f}"
                 )
 
-        # # 학습 완료된 레코드 is_learned=True 처리
-        # record_ids = [r.record_id for r in records]
-        # ItemRecord.objects.filter(record_id__in=record_ids).update(is_learned=True)
-
         self.stdout.write(
             f"학습 완료 - beta0(a): {a:.4f}, alpha(b): {b:.4f}, gamma_tilde: {global_param.gamma_tilde:.4f}"
         )
