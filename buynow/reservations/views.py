@@ -498,7 +498,7 @@ class LikeDetail(APIView):
                     * 100
                 )
                 if max_discount_item.current_discount_rate
-                and max_discount_item.current_discount_rate > 0
+                and max_discount_item.current_discount_rate >= 0.01
                 else max_discount_item.menu.menu_price
             )
 

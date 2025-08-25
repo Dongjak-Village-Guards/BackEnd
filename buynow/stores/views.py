@@ -269,7 +269,7 @@ class StoreListView(APIView):
                     // 100
                     * 100
                 )
-                if item.current_discount_rate and item.current_discount_rate > 0
+                if item.current_discount_rate and item.current_discount_rate >= 0.01
                 else item.menu.menu_price
             )
 
@@ -754,7 +754,7 @@ class StoreSpaceDetailView(APIView):
                 continue
 
             for item in store_items:
-                if item.current_discount_rate and item.current_discount_rate > 0:
+                if item.current_discount_rate and item.current_discount_rate >= 0.01:
                     discounted_price = int(
                         menu.menu_price * (1 - item.current_discount_rate)
                     )
@@ -954,7 +954,7 @@ class StoreSingleSpaceDetailView(APIView):
                 .first()
             )
             if item:
-                if item.current_discount_rate and item.current_discount_rate > 0:
+                if item.current_discount_rate and item.current_discount_rate >= 0.01:
                     discounted_price = (
                         int(menu.menu_price * (1 - item.current_discount_rate)) // 100
                     ) * 100
@@ -1190,7 +1190,7 @@ class StoreItemDetailView(APIView):
         discount_rate_percent = (
             int(item.current_discount_rate * 100) if item.current_discount_rate else 0
         )
-        if item.current_discount_rate and item.current_discount_rate > 0:
+        if item.current_discount_rate and item.current_discount_rate >= 0.01:
             discounted_price = (
                 int(menu.menu_price * (1 - item.current_discount_rate)) // 100
             ) * 100
