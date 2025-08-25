@@ -1242,7 +1242,7 @@ class MakeAddress(APIView):
         return Response({"message": "주소 수정 완료"})
 
 
-# 공급자 API -----------------------------------------------
+# 공급자 API
 
 
 # 공급자용 가게 등록/조회 하기

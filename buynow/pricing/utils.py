@@ -1,5 +1,3 @@
-# from pricing.models import MenuPricingParam
-# from pricing.models import MenuPricingParam
 from django.apps import apps
 from stores.models import StoreItem
 from records.models import ItemRecord

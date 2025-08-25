@@ -394,11 +394,6 @@ class Command(BaseCommand):
                     slot.is_reserved = True
                     slot.save()
                     items_with_stock.remove(item)
-                    # store = item.store
-                    # store.is_active = store.storeitem_set.filter(
-                    #     item_stock__gt=0
-                    # ).exists()
-                    # store.save()
 
             if (idx + 1) % 10 == 0:
                 self.stdout.write(
