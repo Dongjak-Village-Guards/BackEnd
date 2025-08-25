@@ -1437,6 +1437,7 @@ class OwnerStatic(APIView):
         item_records = ItemRecord.objects.filter(
             store_item_id__in=store_item_ids,
             created_at__gte=record_start_date,  # BaseModel 상속받았으니 created_at 존재한다고 가정
+            record_stock = 0,
             sold = 1,
         ).values("time_offset_idx", "record_discount_rate", "created_at")
 
