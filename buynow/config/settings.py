@@ -182,6 +182,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://dongjak.netlify.app",
     "https://designcheck.netlify.app",
     "https://nowsale.streamlit.app",
+    "https://nowsale.netlify.app/",
 ]
 pymysql.install_as_MySQLdb()
 
