@@ -179,6 +179,11 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://3.34.137.19:9001",
+    "http://3.34.137.19:9002",
+    "http://3.34.137.19:9003",
+    "http://3.34.137.19:9004",
+    "http://3.34.137.19:9005",
     "https://dongjak.netlify.app",
     "https://designcheck.netlify.app",
     "https://nowsale.streamlit.app",
