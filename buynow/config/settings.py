@@ -179,6 +179,11 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://3.34.137.19:9001",
+    "http://3.34.137.19:9002",
+    "http://3.34.137.19:9003",
+    "http://3.34.137.19:9004",
+    "http://3.34.137.19:9005",
     "https://dongjak.netlify.app",
     "https://designcheck.netlify.app",
     "https://nowsale.streamlit.app",
@@ -214,8 +219,8 @@ REST_FRAMEWORK = {
 REST_USE_JWT = True
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),  # 유효기간 10시간
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=3),  # 유효기간 3일 hours=10
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일 days=7
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     "AUTH_HEADER_TYPES": ("Bearer", "JWT"),
