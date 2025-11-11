@@ -28,9 +28,10 @@ def get_secret(key):
 
 EC2_HOST = get_secret("EC2_HOST")
 EC2_USER = get_secret("EC2_USER")
-EC2_KEY_PATHS = get_secret("EC2_KEY_PATHS")  # local/server 경로 둘 다 포함
+EC2_KEY_PATHS = get_secret("EC2_KEY_PATH")  # local/server 경로 둘 다 포함
+EC2_KEY_PATH =get_secret("EC2_KEY_PATH")
 
-# 현재 OS에 따라 경로 선택
+"""# 현재 OS에 따라 경로 선택
 if platform.system() == "Linux":
     # 서버(Ubuntu)
     EC2_KEY_PATH = EC2_KEY_PATHS.get("server")
@@ -39,13 +40,13 @@ else:
     EC2_KEY_PATH = EC2_KEY_PATHS.get("local")
 
 # ~ 경로를 절대경로로 변환
-EC2_KEY_PATH = os.path.expanduser(EC2_KEY_PATH)
+EC2_KEY_PATH = os.path.expanduser(EC2_KEY_PATH)"""
 
 # 키파일 존재 여부 확인
 if not os.path.exists(EC2_KEY_PATH):
     raise FileNotFoundError(f"[오류] SSH 키 파일이 없습니다: {EC2_KEY_PATH}")
 
-ENVIRONMENT = os.getenv("DJANGO_ENV", "development")
+ENVIRONMENT = os.getenv("DJANGO_ENV", "deployment")
 RDS_HOSTS = get_secret("RDS_HOSTS")
 RDS_HOST = RDS_HOSTS.get(ENVIRONMENT)
 

@@ -107,7 +107,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-ENVIRONMENT = os.getenv("DJANGO_ENV", "development")  # 기본값은 development
+ENVIRONMENT = os.getenv("DJANGO_ENV", "deployment")  # 기본값은 development
 
 DB_DEV_PW = get_secret("DB_DEV_PW")  # 개발용 DB 비밀번호
 DB_DEP_PW = get_secret("DB_DEP_PW")  # 배포용 DB 비밀번호
@@ -123,8 +123,8 @@ DATABASES = {
     },
     "deployment": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "buynow_dep",  # 배포용 DB 이름
-        "USER": "likelion13th",
+        "NAME": "buynow",  # 배포용 DB 이름
+        "USER": "admin",
         "PASSWORD": DB_DEP_PW,
         "HOST": "127.0.0.1",
         "PORT": "3307",
@@ -219,8 +219,8 @@ REST_FRAMEWORK = {
 REST_USE_JWT = True
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),  # 유효기간 10시간
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=3),  # 유효기간 3일 hours=10
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 유효기간 7일 days=7
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     "AUTH_HEADER_TYPES": ("Bearer", "JWT"),

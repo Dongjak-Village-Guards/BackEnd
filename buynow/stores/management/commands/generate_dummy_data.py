@@ -19,7 +19,7 @@ from pricing.utils import (
     create_item_record,
     safe_create_item_record,
 )
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 import random
 from faker import Faker
 
@@ -66,7 +66,7 @@ class Command(BaseCommand):
                 return
 
         faker = Faker("ko_KR")
-        start_date = datetime.today().date() - timedelta(days=7)
+        start_date = date.today()
         days = options["days"]
         hours = options["hours"]
         batch_size = 20  # 배치 크기 50으로 설정
@@ -276,15 +276,16 @@ class Command(BaseCommand):
             max_discount_rate = find_max_discount(menu)
 
             for day_offset in range(days):
-                date = start_date + timedelta(days=day_offset)
+                # date = start_date + timedelta(days=day_offset)
+                current_date = start_date + timedelta(days=day_offset)
                 for hour in hours:
                     stock = 1 if random.random() < 0.5 else 0
                     record = StoreItem(
                         menu=menu,
                         space=sms.space,
                         store=menu.store,
-                        item_reservation_date=date,
-                        item_reservation_day=date.strftime("%a"),
+                        item_reservation_date=current_date,
+                        item_reservation_day=current_date.strftime("%a"),
                         item_reservation_time=hour,
                         item_stock=stock,
                         current_discount_rate=0.1,
@@ -316,11 +317,11 @@ class Command(BaseCommand):
         records_to_create = []
         for space in StoreSpace.objects.all():
             for day_offset in range(days):
-                date = start_date + timedelta(days=day_offset)
+                current_date = start_date + timedelta(days=day_offset)
                 for hour in hours:
                     record = StoreSlot(
                         space=space,
-                        slot_reservation_date=date,
+                        slot_reservation_date=current_date,
                         slot_reservation_time=hour,
                         is_reserved=False,
                         is_dummy=True,
@@ -344,83 +345,87 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.NOTICE("StoreSlot 생성 완료"))
 
-        # 예약 생성
-        today = date.today()
-        dummy_start_date = today - timedelta(days=6)
-        dummy_end_date = today - timedelta(days=1)
+        # # 예약 생성
+        # today = date.today()
+        # dummy_start_date = today
+        # dummy_end_date = today + timedelta(days=60)
 
-        items_with_stock = list(
-            StoreItem.objects.filter(
-                item_stock=1,
-                item_reservation_date__gte=dummy_start_date,
-                item_reservation_date__lte=dummy_end_date,
-            )
-        )
-        random.shuffle(items_with_stock)
+        # items_with_stock = list(
+        #     StoreItem.objects.filter(
+        #         item_stock=1,
+        #         item_reservation_date__gte=dummy_start_date,
+        #         item_reservation_date__lte=dummy_end_date,
+        #     )
+        # )
+        # random.shuffle(items_with_stock)
 
-        for idx, customer in enumerate(customers):
-            for _ in range(random.randint(1, 3)):
-                available_items = [
-                    item for item in items_with_stock if item.item_stock == 1
-                ]
-                if not available_items:
-                    break
-                item = random.choice(available_items)
-                slot = StoreSlot.objects.filter(
-                    space=item.space,
-                    slot_reservation_date=item.item_reservation_date,
-                    slot_reservation_time=item.item_reservation_time,
-                    is_reserved=False,
-                ).first()
-                if slot:
-                    discounted_price = round(
-                        item.menu.menu_price * (1 - item.current_discount_rate)
-                    )
-                    Reservation.objects.create(
-                        user=customer,
-                        store_item=item,
-                        reservation_slot=slot,
-                        reservation_cost=discounted_price,
-                        is_dummy=True,
-                    )
+        # for idx, customer in enumerate(customers):
+        #     for _ in range(random.randint(1, 3)):
+        #         available_items = [
+        #             item for item in items_with_stock if item.item_stock == 1
+        #         ]
+        #         if not available_items:
+        #             break
+        #         item = random.choice(available_items)
+        #         slot = StoreSlot.objects.filter(
+        #             space=item.space,
+        #             slot_reservation_date=item.item_reservation_date,
+        #             slot_reservation_time=item.item_reservation_time,
+        #             is_reserved=False,
+        #         ).first()
+        #         if slot:
+        #             discounted_price = round(
+        #                 item.menu.menu_price * (1 - item.current_discount_rate)
+        #             )
+        #             Reservation.objects.create(
+        #                 user=customer,
+        #                 store_item=item,
+        #                 reservation_slot=slot,
+        #                 reservation_cost=discounted_price,
+        #                 is_dummy=True,
+        #             )
 
-                    safe_create_item_record(item, sold=1, is_dummy_flag=True)
+        #             # 예약 생성 관련 학습 호출 제거
+        #             # safe_create_item_record(item, sold=1, is_dummy_flag=True)
 
-                    discount_amount = item.menu.menu_price * item.current_discount_rate
-                    customer.user_discounted_cost_sum += discount_amount
-                    customer.save()
-                    item.item_stock = 0
-                    item.save()
-                    slot.is_reserved = True
-                    slot.save()
-                    items_with_stock.remove(item)
+        #             # 고객 할인 금액 누적 및 저장 제거
+        #             # discount_amount = item.menu.menu_price * item.current_discount_rate
+        #             # customer.user_discounted_cost_sum += discount_amount
+        #             # customer.save()
+        #             item.item_stock = 0
+        #             item.save()
+        #             slot.is_reserved = True
+        #             slot.save()
+        #             items_with_stock.remove(item)
 
-            if (idx + 1) % 10 == 0:
-                self.stdout.write(
-                    self.style.NOTICE(
-                        f"예약 생성 진행: 고객 {idx + 1}/{len(customers)} 완료"
-                    )
-                )
+        #     if (idx + 1) % 10 == 0:
+        #         self.stdout.write(
+        #             self.style.NOTICE(
+        #                 f"예약 생성 진행: 고객 {idx + 1}/{len(customers)} 완료"
+        #             )
+        #         )
 
-        self.stdout.write(self.style.NOTICE("예약 생성 완료"))
-        # 예약 생성 완료 후 store.is_active 일괄 업데이트
-        for store in stores:
-            store.is_active = store.storeitem_set.filter(item_stock__gt=0).exists()
-            store.save()
+        # self.stdout.write(self.style.NOTICE("예약 생성 완료"))
+        # # 예약 생성 완료 후 store.is_active 일괄 업데이트
+        # for store in stores:
+        #     store.is_active = store.storeitem_set.filter(item_stock__gt=0).exists()
+        #     store.save()
+        # # 여기까지
 
-        #  미판매 재고에 대한 기록
-        count = 0
-        for item in StoreItem.objects.filter(item_stock=1, is_dummy=True):
-            safe_create_item_record(item, sold=0, is_dummy_flag=True)
-            count += 1
-            if count % 100 == 0:
-                self.stdout.write(
-                    self.style.NOTICE(f"미판매 재고 기록 생성 진행: {count}개 완료")
-                )
+        # 미판매 재고 기록 생성 루프 제거
+        # 미판매 재고에 대한 기록
+        # count = 0
+        # for item in StoreItem.objects.filter(item_stock=1, is_dummy=True):
+        #     safe_create_item_record(item, sold=0, is_dummy_flag=True)
+        #     count += 1
+        #     if count % 100 == 0:
+        #         self.stdout.write(
+        #             self.style.NOTICE(f"미판매 재고 기록 생성 진행: {count}개 완료")
+        #         )
 
-        self.stdout.write(
-            self.style.NOTICE(f"미판매 재고 기록 생성 완료, 총 {count}개")
-        )
+        # self.stdout.write(
+        #     self.style.NOTICE(f"미판매 재고 기록 생성 완료, 총 {count}개")
+        # )
 
         #  UserLike 생성
         records_to_create = []
